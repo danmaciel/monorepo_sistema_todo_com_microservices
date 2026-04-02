@@ -65,7 +65,30 @@ todo-monorepo/
 - Node.js 18+
 - Maven 3.9+
 
-### 1. Subir todos os serviços (Backend)
+### 1. Script de Desenvolvimento Local (Recomendado)
+
+O script `scripts/dev-local.sh` permite subir/parar serviços individualmente com interface interativa:
+
+```bash
+# Execute o script
+./scripts/dev-local.sh
+
+# Opções disponíveis:
+#   1-5)  Subir serviços individualmente
+#   6-10) Parar serviços individualmente
+#   d1-d3) Subir com DEBUG (JDWP)
+#   11) Subir TODOS (Eureka → User → Todo → Gateway)
+#   12) Parar TODOS
+#   13) Ver Status
+#   14) Ver Logs
+#   d) Iniciar Docker (Banco de Dados)
+#   d0) Parar Docker (Banco de Dados)
+#   15) Sair
+```
+
+> **Nota:** Antes de subir os serviços Java, certifique-se de que o Docker (banco de dados) está rodando (`d`).
+
+### 2. Subir todos os serviços (Backend)
 ```bash
 # Development com Docker
 npm run dev
@@ -77,7 +100,7 @@ npm run dev:detached
 npm run dev:services
 ```
 
-### 2. Desenvolvimento Local do Frontend
+### 3. Desenvolvimento Local do Frontend
 ```bash
 # Navegue até o diretório
 cd packages/web-app
@@ -89,7 +112,7 @@ npm install
 npm run dev
 ```
 
-### 3. Visualizar logs
+### 4. Visualizar logs
 ```bash
 # Todos os logs
 npm run logs
@@ -101,7 +124,7 @@ npm run logs:services
 npm run logs:web
 ```
 
-### 4. Parar os serviços
+### 5. Parar os serviços
 ```bash
 npm run stop
 
