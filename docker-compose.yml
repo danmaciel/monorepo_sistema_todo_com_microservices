@@ -1,0 +1,144 @@
+version: '3.8'
+
+services:
+  # ============================================
+  # DATABASES
+  # ============================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: todo-postgres
+    environment:
+      POSTGRES_DB: tododb
+      POSTGRES_USER: todouser
+      POSTGRES_PASSWORD: todopass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - todo-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U todouser -d tododb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: todo-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - todo-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # SERVICE REGISTRY & DISCOVERY
+  # ============================================
+  eureka:
+    build:
+      context: ./packages/eureka-server
+      dockerfile: Dockerfile
+    container_name: todo-eureka
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      EUREKA_INSTANCE_HOSTNAME: eureka
+    ports:
+      - "8761:8761"
+    networks:
+      - todo-network
+    depends_on:
+      - postgres
+
+  # ============================================
+  # API GATEWAY
+  # ============================================
+  gateway:
+    build:
+      context: ./packages/api-gateway
+      dockerfile: Dockerfile
+    container_name: todo-gateway
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka/
+    ports:
+      - "8080:8080"
+    networks:
+      - todo-network
+    depends_on:
+      eureka:
+        condition: service_healthy
+
+  # ============================================
+  # MICROSERVICES
+  # ============================================
+  user-service:
+    build:
+      context: ./packages/user-service
+      dockerfile: Dockerfile
+    container_name: todo-user-service
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/tododb
+      SPRING_DATASOURCE_USERNAME: todouser
+      SPRING_DATASOURCE_PASSWORD: todopass
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka/
+    ports:
+      - "8081:8081"
+    networks:
+      - todo-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      eureka:
+        condition: service_healthy
+
+  todo-service:
+    build:
+      context: ./packages/todo-service
+      dockerfile: Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/tododb
+      SPRING_DATASOURCE_USERNAME: todouser
+      SPRING_DATASOURCE_PASSWORD: todopass
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka/
+    ports:
+      - "8082:8082"
+    networks:
+      - todo-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      eureka:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+
+  # ============================================
+  # FRONTEND
+  # ============================================
+  web-app:
+    build:
+      context: ./packages/web-app
+      dockerfile: Dockerfile
+    container_name: todo-web
+    environment:
+      VITE_API_URL: http://localhost:8080
+    ports:
+      - "3000:3000"
+    networks:
+      - todo-network
+    depends_on:
+      - gateway
+
+networks:
+  todo-network:
+    driver: bridge
+
+volumes:
+  postgres_data:

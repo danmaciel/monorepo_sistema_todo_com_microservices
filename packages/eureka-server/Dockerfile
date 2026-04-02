@@ -1,0 +1,2 @@
+"FROM eclipse-temurin:17-jdk-alpine AS builder\nWORKDIR /app\nCOPY pom.xml .\nCOPY src ./src\nRUN apk add --no-cache maven && \\\n    mvn clean package -DskipTests\n\nFROM eclipse-temurin:17-jre-alpine\nWORKDIR /app\nCOPY --from=builder /app/target/*.jar app.jar\nEXPOSE 8761\nENTRYPOINT [\"java\", \"-jar\", \"app.jar\"]
+"
