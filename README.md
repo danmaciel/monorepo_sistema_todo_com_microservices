@@ -88,17 +88,19 @@ O script `scripts/dev-local.sh` permite subir/parar serviços individualmente co
 
 > **Nota:** Antes de subir os serviços Java, certifique-se de que o Docker (banco de dados) está rodando (`d`).
 
-### 2. Subir todos os serviços (Backend)
+### 2. Subir todos os serviços via Docker Compose
 ```bash
-# Development com Docker
+# Development (sobe todos os containers)
 npm run dev
 
 # Em background
 npm run dev:detached
 
-# Apenas os serviços (sem frontend)
+# Apenas os serviços backend (sem frontend)
 npm run dev:services
 ```
+
+> **Nota:** Esses comandos usam Docker Compose por baixo, subindo todos os serviços como containers Docker.
 
 ### 3. Desenvolvimento Local do Frontend
 ```bash
