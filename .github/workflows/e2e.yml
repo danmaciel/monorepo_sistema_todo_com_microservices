@@ -1,0 +1,33 @@
+name: Docker Compose E2E
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v5
+      - name: Generate disposable CI credentials
+        shell: bash
+        run: |
+          echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
+          echo "JWT_SECRET=$(openssl rand -hex 48)" >> "$GITHUB_ENV"
+      - name: Build and start backend services
+        run: docker compose up --build -d postgres eureka user-service todo-service gateway
+      - name: Verify service availability and business scenario via Gateway
+        run: python3 scripts/e2e_gateway.py
+      - name: Show container diagnostics on failure
+        if: failure()
+        run: |
+          docker compose ps
+          docker compose logs --tail=100 --no-color
+      - name: Tear down disposable services and volumes
+        if: always()
+        run: docker compose down -v --remove-orphans
