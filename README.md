@@ -237,6 +237,10 @@ A pipeline [Services CI](.github/workflows/ci.yml) executa `mvn verify` para os 
 
 O gateway utiliza rotas estáticas; o Eureka registra os serviços, mas não é usado como balanceador dinâmico pelas rotas atuais. O PostgreSQL é compartilhado entre serviços. Essas escolhas e os próximos passos estão explicados em [Arquitetura e decisões técnicas](docs/ARCHITECTURE.md).
 
+## 🔎 Tracing distribuído (Docker)
+
+O Gateway, User Service e Todo Service exportam spans OpenTelemetry para um Zipkin local, acessível em `http://localhost:9411` após iniciar o Compose. A pipeline E2E também confirma o recebimento de spans dos três serviços. Consulte [guia de tracing e limitações](docs/TRACING.md).
+
 ## 📚 Documentação Adicional
 
 - [Eureka Server](./packages/eureka-server/README.md)
