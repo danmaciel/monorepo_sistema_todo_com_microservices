@@ -45,6 +45,12 @@ feign:
         url: http://user-service:8081
 
 management:
+  tracing:
+    sampling:
+      probability: 1.0 # demonstration environment only
+  zipkin:
+    tracing:
+      endpoint: ${ZIPKIN_ENDPOINT:http://zipkin:9411/api/v2/spans}
   endpoints:
     web:
       exposure:
@@ -54,5 +60,7 @@ management:
       show-details: always
 
 logging:
+  pattern:
+    level: "%5p [${spring.application.name:},%X{traceId:-},%X{spanId:-}]"
   level:
     '[com.todo]': INFO
