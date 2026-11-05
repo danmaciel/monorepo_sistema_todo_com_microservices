@@ -6,8 +6,8 @@ spring:
     name: user-service
   datasource:
     url: jdbc:postgresql://postgres:5432/tododb
-    username: todouser
-    password: todopass
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 10
@@ -28,7 +28,7 @@ spring:
     default-property-inclusion: non_null
 
 jwt:
-  secret: MinhaChaveSecretaSuperSeguraDoJWTParaUserService2024!@#$%^
+  secret: ${JWT_SECRET}
   expiration: 86400000
 
 eureka:
