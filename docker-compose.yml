@@ -10,9 +10,9 @@ services:
     environment:
       POSTGRES_DB: tododb
       POSTGRES_USER: todouser
-      POSTGRES_PASSWORD: todopass
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in your environment}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
@@ -27,7 +27,7 @@ services:
     image: redis:7-alpine
     container_name: todo-redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     networks:
       - todo-network
     healthcheck:
@@ -48,7 +48,7 @@ services:
       SPRING_PROFILES_ACTIVE: docker
       EUREKA_INSTANCE_HOSTNAME: eureka
     ports:
-      - "8761:8761"
+      - "127.0.0.1:8761:8761"
     networks:
       - todo-network
     depends_on:
@@ -85,10 +85,11 @@ services:
       SPRING_PROFILES_ACTIVE: docker
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/tododb
       SPRING_DATASOURCE_USERNAME: todouser
-      SPRING_DATASOURCE_PASSWORD: todopass
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in your environment}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in your environment}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka/
     ports:
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
     networks:
       - todo-network
     depends_on:
@@ -105,10 +106,11 @@ services:
       SPRING_PROFILES_ACTIVE: docker
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/tododb
       SPRING_DATASOURCE_USERNAME: todouser
-      SPRING_DATASOURCE_PASSWORD: todopass
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in your environment}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in your environment}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka/
     ports:
-      - "8082:8082"
+      - "127.0.0.1:8082:8082"
     networks:
       - todo-network
     depends_on:
