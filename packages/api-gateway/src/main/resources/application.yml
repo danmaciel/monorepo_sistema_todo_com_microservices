@@ -30,7 +30,7 @@ spring:
       globalcors:
         cors-configurations:
           '[/**]':
-            allowedOrigins: "*"
+            allowedOrigins: ["http://localhost:3000", "http://localhost:5173"]
             allowedMethods:
               - GET
               - POST
@@ -59,14 +59,14 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,gateway
+        include: health,info
   endpoint:
     health:
-      show-details: always
+      show-details: when_authorized
     gateway:
       enabled: true
 
 logging:
   level:
-    org.springframework.cloud.gateway: DEBUG
+    org.springframework.cloud.gateway: INFO
     reactor.netty: INFO
