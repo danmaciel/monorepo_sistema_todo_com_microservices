@@ -57,6 +57,12 @@ todo-monorepo/
 └── scripts/
 ```
 
+## 🛡️ Configuração segura
+
+Antes de iniciar com Docker Compose, copie `.env.example` para `.env` e preencha `POSTGRES_PASSWORD` e `JWT_SECRET` com valores fortes (não versione o `.env`). Para executar os serviços Java fora do Docker, exporte `DB_PASSWORD` e `JWT_SECRET` no ambiente. Credenciais de demonstração não são apropriadas para produção.
+
+**Importante:** os serviços Java precisam compartilhar o segredo JWT. No ambiente Docker o Compose fornece essas variáveis; no ambiente local o segredo e a senha não são mais embutidos nos arquivos `application.yml`.
+
 ## 🚀 Como Executar
 
 ### Pré-requisitos
@@ -224,6 +230,12 @@ npm run build
 # Executar comando em workspace específico
 npm run dev --workspace=web-app
 ```
+
+## 🧪 Qualidade, decisões e limites
+
+A pipeline [Services CI](.github/workflows/ci.yml) executa `mvn verify` para os quatro serviços Java e o build do frontend. Há testes unitários de regras de autenticação e propriedade de tarefas, mas ainda faltam testes ponta a ponta do ambiente Docker.
+
+O gateway utiliza rotas estáticas; o Eureka registra os serviços, mas não é usado como balanceador dinâmico pelas rotas atuais. O PostgreSQL é compartilhado entre serviços. Essas escolhas e os próximos passos estão explicados em [Arquitetura e decisões técnicas](docs/ARCHITECTURE.md).
 
 ## 📚 Documentação Adicional
 

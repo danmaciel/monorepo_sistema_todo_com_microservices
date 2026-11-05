@@ -5,9 +5,9 @@ spring:
   application:
     name: todo-service
   datasource:
-    url: jdbc:postgresql://localhost:5432/tododb
-    username: todouser
-    password: todopass
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/tododb}
+    username: ${DB_USERNAME:todouser}
+    password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 10
@@ -26,7 +26,7 @@ spring:
     default-property-inclusion: non_null
 
 jwt:
-  secret: MinhaChaveSecretaSuperSeguraDoJWTParaUserService2024!@#$%^
+  secret: ${JWT_SECRET}
 
 eureka:
   client:
@@ -50,7 +50,7 @@ management:
         include: health,info
   endpoint:
     health:
-      show-details: always
+      show-details: when_authorized
 
 logging:
   level:
