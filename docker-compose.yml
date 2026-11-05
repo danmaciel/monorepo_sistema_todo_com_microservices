@@ -36,6 +36,14 @@ services:
       timeout: 5s
       retries: 5
 
+  # Local-only distributed tracing backend (do not expose publicly)
+  zipkin:
+    image: openzipkin/zipkin:3
+    ports:
+      - "127.0.0.1:9411:9411"
+    networks:
+      - todo-network
+
   # ============================================
   # SERVICE REGISTRY & DISCOVERY
   # ============================================
@@ -70,6 +78,7 @@ services:
     container_name: todo-gateway
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka/
     ports:
       - "8080:8080"
@@ -89,6 +98,7 @@ services:
     container_name: todo-user-service
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/tododb
       SPRING_DATASOURCE_USERNAME: todouser
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in your environment}
@@ -116,6 +126,7 @@ services:
       dockerfile: Dockerfile
     environment:
       SPRING_PROFILES_ACTIVE: docker
+      ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/tododb
       SPRING_DATASOURCE_USERNAME: todouser
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in your environment}
