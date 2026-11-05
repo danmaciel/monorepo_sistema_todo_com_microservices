@@ -53,6 +53,12 @@ services:
       - todo-network
     depends_on:
       - postgres
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8761/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 40s
 
   # ============================================
   # API GATEWAY
@@ -97,6 +103,12 @@ services:
         condition: service_healthy
       eureka:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8081/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 50s
 
   todo-service:
     build:
