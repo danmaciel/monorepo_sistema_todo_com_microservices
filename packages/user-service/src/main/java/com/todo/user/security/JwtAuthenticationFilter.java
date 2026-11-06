@@ -38,7 +38,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 
                 Optional<User> userOptional = userRepository.findById(userId);
                 
-                if (userOptional.isPresent()) {
+                if (userOptional.isPresent() && Boolean.TRUE.equals(userOptional.get().getEnabled())) {
                     User user = userOptional.get();
                     
                     UsernamePasswordAuthenticationToken authentication =
