@@ -84,3 +84,7 @@ O desenho não afirma que um cookie, endpoint de refresh ou armazenamento de ses
 ## Progresso de implementação — modelo isolado (etapa 1)
 
 Foi criada uma implementação **sem integração** com material opaco de 256 bits, fingerprint SHA-256 e um registro de domínio imutável para sessão, com testes unitários. Ela ainda **não** grava no PostgreSQL, não implementa endpoints, não emite refresh token no login, não realiza rotação nem garante revogação entre serviços. Veja [Laboratório de sessão de refresh](STUDY_REFRESH_SESSION.md). O status do ADR permanece **proposto** até a validação do fluxo de ponta a ponta.
+
+## Progresso — banco e consumo único (etapa 2)
+
+Foi adicionada uma migração Flyway para a tabela de sessões e um repositório JDBC que persiste somente fingerprints SHA-256 e consome tokens por `UPDATE` condicional atômico. Testes com PostgreSQL via Testcontainers verificam o comportamento de duas requisições concorrentes. **Isto ainda não implementa rotação transacional completa, HTTP refresh/logout, invalidação de família ou renovação no frontend.** Leia [o laboratório de persistência](STUDY_REFRESH_PERSISTENCE.md).
