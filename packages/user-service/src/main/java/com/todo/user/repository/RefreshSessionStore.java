@@ -5,7 +5,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 import java.sql.Timestamp;
-import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.Objects;
 
 /**
@@ -33,6 +35,32 @@ public class RefreshSessionStore {
                         "VALUES (?, ?, ?, ?, ?)",
                 session.id(), session.userId(), session.familyId(), session.tokenFingerprint(),
                 Timestamp.from(session.expiresAt()));
+    }
+
+    /**
+     * Claims a valid parent token and returns its trusted database identity.
+     * Must be called inside the same transaction as insertion of its successor.
+     * No row is returned for missing, consumed, revoked or expired tokens.
+     */
+    public Optional<RefreshSession> claimForRotation(String rawToken) {
+        if (rawToken == null || rawToken.isBlank()) {
+            return Optional.empty();
+        }
+        String fingerprint = com.todo.user.security.RefreshTokenMaterial.fingerprint(rawToken);
+        List<RefreshSession> claimed = jdbc.query(
+                "UPDATE refresh_sessions SET consumed_at = CURRENT_TIMESTAMP " +
+                        "WHERE token_fingerprint = ? AND consumed_at IS NULL " +
+                        "AND revoked_at IS NULL AND expires_at > CURRENT_TIMESTAMP " +
+                        "RETURNING id, user_id, family_id, token_fingerprint, expires_at, revoked_at",
+                (rs, rowNum) -> new RefreshSession(
+                        rs.getObject("id", UUID.class),
+                        rs.getObject("user_id", UUID.class),
+                        rs.getObject("family_id", UUID.class),
+                        rs.getString("token_fingerprint"),
+                        rs.getTimestamp("expires_at").toInstant(),
+                        null),
+                fingerprint);
+        return claimed.stream().findFirst();
     }
 
     /**
