@@ -2,11 +2,14 @@ package com.todo.user.repository;
 
 import com.todo.user.security.RefreshSession;
 import com.todo.user.security.RefreshTokenMaterial;
+import com.todo.user.service.RefreshSessionRotationService;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import static org.mockito.Mockito.*;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -31,14 +34,17 @@ class RefreshSessionStoreTest {
 
     static JdbcTemplate jdbc;
     static RefreshSessionStore store;
+    static DriverManagerDataSource dataSource;
+    static RefreshSessionRotationService rotations;
 
     @BeforeAll
     static void migrate() {
-        DriverManagerDataSource dataSource = new DriverManagerDataSource(
+        dataSource = new DriverManagerDataSource(
                 postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
         Flyway.configure().dataSource(dataSource).load().migrate();
         jdbc = new JdbcTemplate(dataSource);
         store = new RefreshSessionStore(jdbc);
+        rotations = new RefreshSessionRotationService(store, new DataSourceTransactionManager(dataSource));
     }
 
     private static String createActiveToken() {
@@ -112,6 +118,105 @@ class RefreshSessionStoreTest {
         jdbc.update("UPDATE refresh_sessions SET revoked_at = CURRENT_TIMESTAMP " +
                         "WHERE token_fingerprint = ?", RefreshTokenMaterial.fingerprint(revoked));
         assertFalse(store.consume(revoked));
+    }
+
+    @Test
+    void rotationReplacesTokenAndPreservesAccountFamilyAndAbsoluteExpiry() {
+        String parent = createActiveToken();
+        String parentFingerprint = RefreshTokenMaterial.fingerprint(parent);
+        UUID owner = jdbc.queryForObject(
+                "SELECT user_id FROM refresh_sessions WHERE token_fingerprint = ?",
+                UUID.class, parentFingerprint);
+        UUID family = jdbc.queryForObject(
+                "SELECT family_id FROM refresh_sessions WHERE token_fingerprint = ?",
+                UUID.class, parentFingerprint);
+        Instant expiry = jdbc.queryForObject(
+                "SELECT expires_at FROM refresh_sessions WHERE token_fingerprint = ?",
+                (rs, rowNum) -> rs.getTimestamp(1).toInstant(), parentFingerprint);
+
+        var next = rotations.rotate(parent).orElseThrow();
+
+        assertFalse(rotations.rotate(parent).isPresent(), "consumed parent cannot rotate twice");
+        assertNotEquals(parent, next.token());
+        assertTrue(RefreshTokenMaterial.matches(next.token(),
+                jdbc.queryForObject(
+                        "SELECT token_fingerprint FROM refresh_sessions WHERE id = ?",
+                        String.class, next.sessionId())));
+        assertEquals(owner, jdbc.queryForObject(
+                "SELECT user_id FROM refresh_sessions WHERE id = ?",
+                UUID.class, next.sessionId()));
+        assertEquals(family, jdbc.queryForObject(
+                "SELECT family_id FROM refresh_sessions WHERE id = ?",
+                UUID.class, next.sessionId()));
+        assertEquals(expiry, jdbc.queryForObject(
+                "SELECT expires_at FROM refresh_sessions WHERE id = ?",
+                (rs, rowNum) -> rs.getTimestamp(1).toInstant(), next.sessionId()));
+    }
+
+    @Test
+    void concurrentRotationsCreateExactlyOneSuccessor() throws Exception {
+        String parent = createActiveToken();
+        String fingerprint = RefreshTokenMaterial.fingerprint(parent);
+        UUID family = jdbc.queryForObject(
+                "SELECT family_id FROM refresh_sessions WHERE token_fingerprint = ?",
+                UUID.class, fingerprint);
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            java.util.concurrent.Callable<Boolean> attempt = () -> {
+                ready.countDown();
+                if (!start.await(10, TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("start gate timed out");
+                }
+                return rotations.rotate(parent).isPresent();
+            };
+            Future<Boolean> first = executor.submit(attempt);
+            Future<Boolean> second = executor.submit(attempt);
+            assertTrue(ready.await(10, TimeUnit.SECONDS));
+            start.countDown();
+
+            assertEquals(1, (first.get(20, TimeUnit.SECONDS) ? 1 : 0)
+                    + (second.get(20, TimeUnit.SECONDS) ? 1 : 0));
+            assertEquals(2, jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM refresh_sessions WHERE family_id = ?",
+                    Integer.class, family));
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void successorInsertFailureRollsBackParentConsumption() {
+        String parent = createActiveToken();
+        RefreshSessionStore failingStore = spy(store);
+        doThrow(new IllegalStateException("Simulated successor storage failure"))
+                .when(failingStore).create(any(RefreshSession.class));
+        RefreshSessionRotationService failingRotations = new RefreshSessionRotationService(
+                failingStore, new DataSourceTransactionManager(dataSource));
+
+        assertThrows(IllegalStateException.class, () -> failingRotations.rotate(parent));
+        assertTrue(rotations.rotate(parent).isPresent(),
+                "failed successor insert must leave parent eligible for retry");
+    }
+
+    @Test
+    void expiredRevokedOrMissingParentsDoNotRotate() {
+        String revoked = createActiveToken();
+        jdbc.update("UPDATE refresh_sessions SET revoked_at = CURRENT_TIMESTAMP " +
+                "WHERE token_fingerprint = ?", RefreshTokenMaterial.fingerprint(revoked));
+        assertTrue(rotations.rotate(revoked).isEmpty());
+
+        String expired = createActiveToken();
+        jdbc.update("UPDATE refresh_sessions SET created_at = CURRENT_TIMESTAMP - INTERVAL '2 minutes', " +
+                        "expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second' " +
+                        "WHERE token_fingerprint = ?", RefreshTokenMaterial.fingerprint(expired));
+        assertTrue(rotations.rotate(expired).isEmpty());
+
+        assertTrue(rotations.rotate(RefreshTokenMaterial.generate()).isEmpty());
+        assertTrue(rotations.rotate(null).isEmpty());
     }
 
     @Test
