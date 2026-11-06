@@ -39,9 +39,43 @@ mvn -f packages/user-service/pom.xml verify
 
 Requer um daemon Docker acessível.
 
-## Limites de consistência
+## Rotação transacional de sessões
 
-**Consumo único não significa rotação transacional completa.** O fluxo futuro deve garantir que o consumo do token anterior e a criação do sucessor sejam confirmados ou revertidos juntos. Também exige identificação e tratamento explícito de replay e revogação de família.
+O serviço `RefreshSessionRotationService` agora executa uma transação abrangendo duas operações JDBC:
+
+1. `claimForRotation`: um `UPDATE ... RETURNING` reivindica uma sessão elegível e recupera `user_id`, `family_id` e `expires_at` diretamente do banco. Uma sessão consumida, revogada ou expirada não pode ser reivindicada.
+2. `create`: insere o sucessor com novo material aleatório de 256 bits, **somente o hash SHA-256** e a mesma identidade/família e expiração absoluta do antecessor.
+
+Se a inserção do sucessor falhar, a transação desfaz também o consumo do antecessor. Duas tentativas concorrentes sobre o mesmo token não podem confirmar dois sucessores.
+
+```mermaid
+sequenceDiagram
+    participant C as Chamador interno
+    participant R as Rotation Service
+    participant DB as PostgreSQL
+    C->>R: rotate(token anterior)
+    R->>DB: BEGIN / UPDATE ... RETURNING
+    alt Token inelegível
+        DB-->>R: Sem registro
+        R-->>C: Sem sucessor
+    else Token válido
+        DB-->>R: Identidade e família da sessão
+        R->>DB: INSERT nova sessão (somente hash)
+        alt Erro de inserção
+            R->>DB: ROLLBACK
+            R-->>C: Erro (token original continua elegível)
+        else Sucesso
+            R->>DB: COMMIT
+            R-->>C: Novo token opaco
+        end
+    end
+```
+
+Os testes `RefreshSessionStoreTest` cobrem rotação, preservação da família, validade absoluta, concorrência e rollback.
+
+**Limites de consistência e segurança:** a rotação funciona no serviço interno e no banco, mas ainda não é exposta por HTTP. Não existe login com refresh, endpoint de logout, verificação do estado atual da conta durante a rotação ou detecção de reutilização que revogue a família. A reutilização do token consumido é recusada, mas ainda não há uma política de resposta a replay. O refresh token original não é persistido nem registrado em logs; o objeto de resultado oculta o token em sua representação textual.
+
+A implementação atual também não garante resiliência à perda de resposta após o COMMIT: o cliente poderia não receber o sucessor. Esse caso precisa ser considerado junto a idempotência e recuperação do fluxo HTTP.
 
 A migração inicial pode precisar de adequações ao histórico de um ambiente existente. Não alterar uma versão Flyway aplicada em produção; criar uma nova migração e validar uma cópia restaurada do banco.
 

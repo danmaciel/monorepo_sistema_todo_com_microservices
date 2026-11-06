@@ -88,3 +88,7 @@ Foi criada uma implementação **sem integração** com material opaco de 256 bi
 ## Progresso — banco e consumo único (etapa 2)
 
 Foi adicionada uma migração Flyway para a tabela de sessões e um repositório JDBC que persiste somente fingerprints SHA-256 e consome tokens por `UPDATE` condicional atômico. Testes com PostgreSQL via Testcontainers verificam o comportamento de duas requisições concorrentes. **Isto ainda não implementa rotação transacional completa, HTTP refresh/logout, invalidação de família ou renovação no frontend.** Leia [documentação de persistência e concorrência](REFRESH_TOKEN_PERSISTENCE.md).
+
+## Progresso — rotação transacional interna (etapa 3)
+
+O `RefreshSessionRotationService` agora usa uma única transação JDBC para reivindicar o token anterior por `UPDATE ... RETURNING` e inserir seu sucessor. Os testes com PostgreSQL verificam que duas tentativas simultâneas produzem no máximo um sucessor, que a expiração absoluta/família são preservadas e que falha de inserção provoca rollback. O novo segredo só é devolvido ao chamador interno após o COMMIT. **Ainda não há endpoint de refresh, emissão no login, verificação de conta ativa na rotação, proteção de replay por família nem integração web**, portanto não existe uma solução de renovação de sessões utilizável por clientes. Veja [Persistência e concorrência](REFRESH_TOKEN_PERSISTENCE.md).
