@@ -11,7 +11,6 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -104,7 +103,8 @@ class RefreshSessionStoreTest {
         store.create(new RefreshSession(
                 UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
                 RefreshTokenMaterial.fingerprint(expired), Instant.now().plusSeconds(60), null));
-        jdbc.update("UPDATE refresh_sessions SET expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second' " +
+        jdbc.update("UPDATE refresh_sessions SET created_at = CURRENT_TIMESTAMP - INTERVAL '2 minutes', " +
+                        "expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second' " +
                         "WHERE token_fingerprint = ?", RefreshTokenMaterial.fingerprint(expired));
         assertFalse(store.consume(expired));
 
