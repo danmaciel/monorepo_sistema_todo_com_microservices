@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { useAuthStore } from '../store/authStore'
+import { isJwtActive } from '../utils/session'
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 
@@ -13,7 +14,10 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     const token = useAuthStore.getState().token
-    if (token) {
+    if (token && !isJwtActive(token)) {
+      useAuthStore.getState().logout()
+      // Let the backend reject requests without credentials (401/403).
+    } else if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
     return config
