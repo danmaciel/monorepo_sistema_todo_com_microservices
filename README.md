@@ -233,13 +233,13 @@ npm run dev --workspace=web-app
 
 ## 🧪 Qualidade, decisões e limites
 
-A pipeline [Services CI](.github/workflows/ci.yml) executa `mvn verify` para os quatro serviços Java e o build do frontend. Há testes unitários de regras de autenticação e propriedade de tarefas, mas ainda faltam testes ponta a ponta do ambiente Docker.
+A pipeline [Services CI](.github/workflows/ci.yml) executa `mvn verify` para os quatro serviços Java e o build do frontend. Além dos testes unitários de autenticação e propriedade de tarefas, a pipeline [Docker Compose E2E](.github/workflows/e2e.yml) já testa o Gateway, PostgreSQL e serviços reais: cadastro, login, criação e edição de tarefas, isolamento entre usuários e exclusão. Ela também verifica traces exportados ao Zipkin.
 
-O gateway utiliza rotas estáticas; o Eureka registra os serviços, mas não é usado como balanceador dinâmico pelas rotas atuais. O PostgreSQL é compartilhado entre serviços. Essas escolhas e os próximos passos estão explicados em [Arquitetura e decisões técnicas](docs/ARCHITECTURE.md).
+O gateway utiliza rotas estáticas; o Eureka registra os serviços, mas não é usado como balanceador dinâmico pelas rotas atuais. O PostgreSQL é compartilhado entre serviços, e o Redis do Compose ainda não é usado como cache pela aplicação. Essas escolhas e os próximos passos estão explicados em [Arquitetura e decisões técnicas](docs/ARCHITECTURE.md).
 
 ## 🔎 Tracing distribuído (Docker)
 
-O Gateway, User Service e Todo Service exportam spans OpenTelemetry para um Zipkin local, acessível em `http://localhost:9411` após iniciar o Compose. A pipeline E2E também confirma o recebimento de spans dos três serviços. Consulte [guia de tracing e limitações](docs/TRACING.md).
+O Gateway, User Service e Todo Service exportam spans OpenTelemetry para um Zipkin local, acessível em `http://localhost:9411` após iniciar o Compose. A pipeline E2E confirma o recebimento de spans dos três serviços. Isso comprova emissão de traces, mas não substitui testes de carga, falha ou observabilidade de produção. Consulte [guia de tracing e limitações](docs/TRACING.md).
 
 ## 📚 Documentação Adicional
 
