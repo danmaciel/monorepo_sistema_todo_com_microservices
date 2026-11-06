@@ -50,5 +50,9 @@ public class RefreshSessionRotationService {
      * It must never be logged, persisted in plaintext or placed in tracing attributes.
      */
     public record RotationResult(UUID sessionId, String token) {
+        @Override
+        public String toString() {
+            return "RotationResult[sessionId=" + sessionId + ", token=[REDACTED]]";
+        }
     }
 }
