@@ -31,4 +31,5 @@ jobs:
           node-version: '20'
           cache: npm
       - run: npm ci
+      - run: npm run test:session --workspace=web-app
       - run: npm run build
