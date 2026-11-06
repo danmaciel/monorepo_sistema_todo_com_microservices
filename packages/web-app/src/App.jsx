@@ -4,11 +4,14 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import TodoList from './pages/TodoList'
 import Layout from './components/Layout'
+import { isJwtActive } from './utils/session'
 
 function ProtectedRoute({ children }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
+  const token = useAuthStore((state) => state.token)
+  const hasActiveSession = isAuthenticated && isJwtActive(token)
   
-  if (!isAuthenticated) {
+  if (!hasActiveSession) {
     return <Navigate to="/login" replace />
   }
   
@@ -18,7 +21,7 @@ function ProtectedRoute({ children }) {
 function PublicRoute({ children }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
   
-  if (isAuthenticated) {
+  if (hasActiveSession) {
     return <Navigate to="/" replace />
   }
   

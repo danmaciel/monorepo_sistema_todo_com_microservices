@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { authService } from '../services/api'
+import { isJwtActive } from '../utils/session'
 
 export const useAuthStore = create(
   persist(
@@ -73,6 +74,17 @@ export const useAuthStore = create(
         token: state.token,
         isAuthenticated: state.isAuthenticated,
       }),
+      // Discard expired/malformed tokens before restoring navigation state.
+      merge: (persisted, current) => {
+        const stored = persisted && typeof persisted === 'object' ? persisted : {}
+        const valid = isJwtActive(stored.token) && Boolean(stored.user)
+        return {
+          ...current,
+          user: valid ? stored.user : null,
+          token: valid ? stored.token : null,
+          isAuthenticated: valid,
+        }
+      },
     }
   )
 )
