@@ -43,14 +43,19 @@ class RefreshSessionStoreTest {
                 postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
         Flyway.configure().dataSource(dataSource).load().migrate();
         jdbc = new JdbcTemplate(dataSource);
+        // This isolated Testcontainers schema models only the User fields required
+        // by refresh authorization; production users remain Hibernate-managed.
+        jdbc.execute("CREATE TABLE users (id UUID PRIMARY KEY, enabled BOOLEAN NOT NULL)");
         store = new RefreshSessionStore(jdbc);
         rotations = new RefreshSessionRotationService(store, new DataSourceTransactionManager(dataSource));
     }
 
     private static String createActiveToken() {
         String token = RefreshTokenMaterial.generate();
+        UUID userId = UUID.randomUUID();
+        jdbc.update("INSERT INTO users (id, enabled) VALUES (?, TRUE)", userId);
         store.create(new RefreshSession(
-                UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                UUID.randomUUID(), userId, UUID.randomUUID(),
                 RefreshTokenMaterial.fingerprint(token), Instant.now().plusSeconds(600), null));
         return token;
     }
@@ -151,6 +156,40 @@ class RefreshSessionStoreTest {
         assertEquals(expiry, jdbc.queryForObject(
                 "SELECT expires_at FROM refresh_sessions WHERE id = ?",
                 (rs, rowNum) -> rs.getTimestamp(1).toInstant(), next.sessionId()));
+    }
+
+    @Test
+    void disabledAccountCannotRotateOrCreateASuccessor() {
+        String parent = createActiveToken();
+        String fingerprint = RefreshTokenMaterial.fingerprint(parent);
+        UUID owner = jdbc.queryForObject(
+                "SELECT user_id FROM refresh_sessions WHERE token_fingerprint = ?",
+                UUID.class, fingerprint);
+        jdbc.update("UPDATE users SET enabled = FALSE WHERE id = ?", owner);
+
+        assertTrue(rotations.rotate(parent).isEmpty());
+        assertEquals(0, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM refresh_sessions WHERE token_fingerprint = ? AND consumed_at IS NOT NULL",
+                Integer.class, fingerprint));
+
+        jdbc.update("UPDATE users SET enabled = TRUE WHERE id = ?", owner);
+        assertTrue(rotations.rotate(parent).isPresent(),
+                "denial must not burn a still-valid refresh token");
+    }
+
+    @Test
+    void deletedAccountCannotRotate() {
+        String parent = createActiveToken();
+        String fingerprint = RefreshTokenMaterial.fingerprint(parent);
+        UUID owner = jdbc.queryForObject(
+                "SELECT user_id FROM refresh_sessions WHERE token_fingerprint = ?",
+                UUID.class, fingerprint);
+        jdbc.update("DELETE FROM users WHERE id = ?", owner);
+
+        assertTrue(rotations.rotate(parent).isEmpty());
+        assertEquals(0, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM refresh_sessions WHERE token_fingerprint = ? AND consumed_at IS NOT NULL",
+                Integer.class, fingerprint));
     }
 
     @Test
