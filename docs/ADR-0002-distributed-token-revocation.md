@@ -96,3 +96,7 @@ O `RefreshSessionRotationService` agora usa uma única transação JDBC para rei
 ## Progresso — verificação da conta na rotação (etapa 4)
 
 A rotação interna agora só pode consumir uma sessão se houver uma conta `users` existente e `enabled = TRUE`. O `UPDATE` condicional inclui um `EXISTS ... FOR SHARE`, que serializa a verificação contra mudanças concorrentes no registro do usuário. Testes PostgreSQL confirmam que contas desativadas ou excluídas não recebem sucessores e que a recusa não consome o token original. **Esta etapa ainda não expõe refresh/logout HTTP, não revoga JWTs de acesso existentes no Todo Service e não resolve a política de replay e invalidação de famílias.**
+
+## Progresso — resposta a replay no armazenamento de refresh (etapa 5)
+
+Quando a rotação interna recebe um token **já consumido, ainda não expirado e não previamente revogado**, a família de refresh sessions é revogada no PostgreSQL. Testes com PostgreSQL exercitam o sucessor, o isolamento entre famílias, tokens desconhecidos, revogados e expirados. A política é conservadora: retries após perda de resposta e concorrência entre abas podem revogar uma sessão legítima; o cliente deverá coordenar renovações, e o contrato HTTP deverá estabelecer como tratar falhas de rede. **Não existem endpoints HTTP de refresh/logout, nem revogação dos access JWTs previamente emitidos no Todo Service.** Veja [persistência de refresh](REFRESH_TOKEN_PERSISTENCE.md).
