@@ -41,7 +41,7 @@ public class RefreshSessionStore {
     /**
      * Claims a valid parent token and returns its trusted database identity.
      * Must be called inside the same transaction as insertion of its successor.
-     * No row is returned for missing, consumed, revoked or expired tokens.
+     * No row is returned for missing, consumed, revoked or expired tokens, or\n     * when the owning account is disabled/deleted. A row-share lock serializes\n     * this check against concurrent account updates.
      */
     public Optional<RefreshSession> claimForRotation(String rawToken) {
         if (rawToken == null || rawToken.isBlank()) {
@@ -52,6 +52,8 @@ public class RefreshSessionStore {
                 "UPDATE refresh_sessions SET consumed_at = CURRENT_TIMESTAMP " +
                         "WHERE token_fingerprint = ? AND consumed_at IS NULL " +
                         "AND revoked_at IS NULL AND expires_at > CURRENT_TIMESTAMP " +
+                        "AND EXISTS (SELECT 1 FROM users u " +
+                        "WHERE u.id = refresh_sessions.user_id AND u.enabled = TRUE FOR SHARE) " +
                         "RETURNING id, user_id, family_id, token_fingerprint, expires_at, revoked_at",
                 (rs, rowNum) -> new RefreshSession(
                         rs.getObject("id", UUID.class),
