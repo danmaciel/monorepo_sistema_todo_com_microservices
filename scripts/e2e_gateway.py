@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Smoke test over the public API Gateway, without printing credentials."""
 import json
+import base64
+import hashlib
+import hmac
+import os
 import sys
 import time
 import urllib.error
@@ -23,6 +27,25 @@ def call(method, path, data=None, token=None):
     except urllib.error.HTTPError as error:
         error.read()
         return error.code, None
+
+
+def expired_signed_token(user_id):
+    """Generate a deliberately expired, correctly signed HS256 JWT for E2E only."""
+    secret = os.environ.get("JWT_SECRET", "")
+    if len(secret.encode("utf-8")) < 32:
+        raise AssertionError("E2E requires JWT_SECRET (at least 32 UTF-8 bytes)")
+
+    def encoded_json(obj):
+        raw = json.dumps(obj, separators=(",", ":")).encode("utf-8")
+        return base64.urlsafe_b64encode(raw).rstrip(b"=")
+
+    now = int(time.time())
+    header = encoded_json({"alg": "HS256", "typ": "JWT"})
+    claims = encoded_json({"sub": user_id, "iat": now - 7200, "exp": now - 3600})
+    signing_input = header + b"." + claims
+    signature = hmac.new(secret.encode("utf-8"), signing_input, hashlib.sha256).digest()
+    signature = base64.urlsafe_b64encode(signature).rstrip(b"=")
+    return (signing_input + b"." + signature).decode("ascii")
 
 
 def expect(status, actual, message):
@@ -80,6 +103,14 @@ def main():
 
     status, _ = call("GET", "/api/users/" + user_ids[0])
     assert status in (401, 403), f"anonymous profile access must be denied, got HTTP {status}"
+
+    # Both services must reject an authentically signed token whose exp is in the past.
+    expired_token = expired_signed_token(user_ids[0])
+    status, _ = call("GET", "/api/users/me", token=expired_token)
+    assert status in (401, 403), f"user-service accepted expired signed JWT: HTTP {status}"
+
+    status, _ = call("GET", "/api/todos", token=expired_token)
+    assert status in (401, 403), f"todo-service accepted expired signed JWT: HTTP {status}"
 
     status, _ = call("POST", "/api/todos", {
         "title": "Anonymous attempt",
