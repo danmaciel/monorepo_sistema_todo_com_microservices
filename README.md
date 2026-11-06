@@ -38,7 +38,7 @@ Sistema de gerenciamento de tarefas (TODO) utilizando arquitetura de microservi�
 | **Todo Service** | Spring Boot + JPA | 8082 |
 | **Service Discovery** | Eureka Server | 8761 |
 | **Banco de Dados** | PostgreSQL 15 | 5432 |
-| **Cache** | Redis 7 | 6379 |
+| **Redis (disponível no Compose; ainda sem integração funcional)** | Redis 7 | 6379 |
 
 ## 📁 Estrutura do Projeto
 
@@ -240,6 +240,19 @@ O gateway utiliza rotas estáticas; o Eureka registra os serviços, mas não é 
 ## 🔎 Tracing distribuído (Docker)
 
 O Gateway, User Service e Todo Service exportam spans OpenTelemetry para um Zipkin local, acessível em `http://localhost:9411` após iniciar o Compose. A pipeline E2E confirma o recebimento de spans dos três serviços. Isso comprova emissão de traces, mas não substitui testes de carga, falha ou observabilidade de produção. Consulte [guia de tracing e limitações](docs/TRACING.md).
+
+## 📐 Documentação técnica
+
+A implementação e os limites de segurança estão registrados nos documentos abaixo. Eles descrevem o comportamento existente, os testes que o sustentam e as decisões ainda pendentes:
+
+- [Arquitetura e limitações](docs/ARCHITECTURE.md)
+- [Validação JWT e autorização](docs/JWT_SECURITY.md)
+- [Modelo de sessão e material de refresh token](docs/REFRESH_TOKEN_DESIGN.md)
+- [Persistência PostgreSQL, Flyway e concorrência](docs/REFRESH_TOKEN_PERSISTENCE.md)
+- [ADR-0001: sessões web e acesso a perfis](docs/ADR-0001-web-session-and-profile-visibility.md)
+- [ADR-0002: alternativas para revogação distribuída](docs/ADR-0002-distributed-token-revocation.md)
+
+**Estado de implementação:** a tabela de refresh sessions e o consumo único estão implementados e testados, mas não existem endpoints de refresh/logout no backend nem rotação transacional completa. A autenticação atual permanece com access JWT de 24 horas.
 
 ## 📚 Documentação Adicional
 
