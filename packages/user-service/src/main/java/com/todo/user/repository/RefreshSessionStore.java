@@ -69,6 +69,30 @@ public class RefreshSessionStore {
     }
 
     /**
+     * Revoke the entire token family if the presented token has already been
+     * consumed and is still inside its absolute lifetime.
+     *
+     * A random/unknown token, an expired token, or a token already revoked
+     * must not affect any family. This is called only after a failed claim;
+     * the successful rotation has already committed at that point.
+     *
+     * @return number of newly revoked sessions in the affected family
+     */
+    public int revokeFamilyOnReplay(String rawToken) {
+        if (rawToken == null || rawToken.isBlank()) {
+            return 0;
+        }
+        String fingerprint = com.todo.user.security.RefreshTokenMaterial.fingerprint(rawToken);
+        return jdbc.update(
+                "UPDATE refresh_sessions SET revoked_at = CURRENT_TIMESTAMP " +
+                        "WHERE family_id = (SELECT family_id FROM refresh_sessions " +
+                        "WHERE token_fingerprint = ? AND consumed_at IS NOT NULL " +
+                        "AND revoked_at IS NULL AND expires_at > CURRENT_TIMESTAMP) " +
+                        "AND revoked_at IS NULL",
+                fingerprint);
+    }
+
+    /**
      * Atomically marks a still-active token as consumed. The database clock
      * determines expiration, preventing application-server clock drift.
      *

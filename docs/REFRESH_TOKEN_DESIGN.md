@@ -27,11 +27,11 @@ stateDiagram-v2
     Expirada --> [*]
 ```
 
-O estado representa os campos disponíveis na persistência. **Não há hoje uma máquina de estados transacional de renovação nem política de replay implementada.** A presença de `family_id` permite modelar revogação de uma família em evolução posterior; não realiza essa ação automaticamente.
+O estado representa os campos disponíveis na persistência. **O fluxo interno já possui rotação transacional e revogação da família quando um token consumido é reutilizado dentro do prazo.** A presença de `family_id` permite essa invalidação, mas ainda não existe um endpoint HTTP de renovação nem um cliente coordenando requisições simultâneas.
 
 ## Requisitos para a evolução
 
-Uma renovação completa precisará consumir o token anterior e registrar o sucessor **na mesma transação**. Também deverá definir política de revogação por reutilização, tratamento de múltiplas abas, perdas de resposta e invalidação de sessões de contas desativadas.
+A rotação interna já consome o token anterior e registra o sucessor **na mesma transação**, verificando contas ativas. A reutilização do anterior provoca revogação da família. Ainda será necessário definir a política operacional de múltiplas abas, perdas de resposta, renovações HTTP, logout e expiração curta do access JWT.
 
 O eventual transporte via cookie `HttpOnly; Secure; SameSite` requer projeto de CORS, CSRF, domínio e HTTPS. Não deve ser ativado apenas por adicionar o atributo do cookie.
 

@@ -259,6 +259,55 @@ class RefreshSessionStoreTest {
     }
 
     @Test
+    void replayOfConsumedParentRevokesItsFamilyButNotOtherAccounts() {
+        String parent = createActiveToken();
+        String unrelated = createActiveToken();
+        String parentHash = RefreshTokenMaterial.fingerprint(parent);
+        String unrelatedHash = RefreshTokenMaterial.fingerprint(unrelated);
+
+        var successor = rotations.rotate(parent).orElseThrow();
+        assertTrue(rotations.rotate(parent).isEmpty(), "old refresh token must not work twice");
+
+        Integer revokedFamily = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM refresh_sessions WHERE family_id = " +
+                        "(SELECT family_id FROM refresh_sessions WHERE token_fingerprint = ?) " +
+                        "AND revoked_at IS NOT NULL",
+                Integer.class, parentHash);
+        assertEquals(2, revokedFamily, "both parent and successor should be revoked");
+
+        assertTrue(rotations.rotate(successor.token()).isEmpty(),
+                "revoked successor cannot refresh the session");
+        assertEquals(0, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM refresh_sessions WHERE token_fingerprint = ? " +
+                        "AND revoked_at IS NOT NULL",
+                Integer.class, unrelatedHash));
+        assertTrue(rotations.rotate(unrelated).isPresent(),
+                "unrelated token families must stay active");
+    }
+
+    @Test
+    void unknownExpiredOrAlreadyRevokedTokensDoNotRevokeOtherSessions() {
+        String active = createActiveToken();
+        String unknown = RefreshTokenMaterial.generate();
+        assertTrue(rotations.rotate(unknown).isEmpty());
+
+        String expired = createActiveToken();
+        jdbc.update("UPDATE refresh_sessions SET consumed_at = CURRENT_TIMESTAMP, " +
+                        "created_at = CURRENT_TIMESTAMP - INTERVAL '2 minutes', " +
+                        "expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second' " +
+                        "WHERE token_fingerprint = ?", RefreshTokenMaterial.fingerprint(expired));
+        assertTrue(rotations.rotate(expired).isEmpty());
+
+        String revoked = createActiveToken();
+        jdbc.update("UPDATE refresh_sessions SET consumed_at = CURRENT_TIMESTAMP, " +
+                        "revoked_at = CURRENT_TIMESTAMP WHERE token_fingerprint = ?",
+                RefreshTokenMaterial.fingerprint(revoked));
+        assertTrue(rotations.rotate(revoked).isEmpty());
+
+        assertTrue(rotations.rotate(active).isPresent());
+    }
+
+    @Test
     void databaseRejectsDuplicateFingerprints() {
         String token = createActiveToken();
         String fingerprint = RefreshTokenMaterial.fingerprint(token);

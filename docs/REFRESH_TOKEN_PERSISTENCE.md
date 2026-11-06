@@ -81,10 +81,44 @@ sequenceDiagram
 
 Os testes `RefreshSessionStoreTest` cobrem rotação, preservação da família, validade absoluta, concorrência e rollback.
 
-**Limites de consistência e segurança:** a rotação funciona no serviço interno e no banco, mas ainda não é exposta por HTTP. Não existe login com refresh, endpoint de logout, verificação do estado atual da conta durante a rotação ou detecção de reutilização que revogue a família. A reutilização do token consumido é recusada, mas ainda não há uma política de resposta a replay. O refresh token original não é persistido nem registrado em logs; o objeto de resultado oculta o token em sua representação textual.
+**Limites de consistência e segurança:** a rotação funciona no serviço interno e no banco, mas ainda não é exposta por HTTP. Não existe login com refresh nem endpoint de logout. A verificação de conta ativa e a detecção de reutilização de token consumido foram implementadas no fluxo interno; a coordenação com navegador, renovação e revogação dos JWTs já emitidos permanecem pendentes. O refresh token original não é persistido nem registrado em logs; o objeto de resultado oculta o token em sua representação textual.
 
 A implementação atual também não garante resiliência à perda de resposta após o COMMIT: o cliente poderia não receber o sucessor. Esse caso precisa ser considerado junto a idempotência e recuperação do fluxo HTTP.
 
 A migração inicial pode precisar de adequações ao histórico de um ambiente existente. Não alterar uma versão Flyway aplicada em produção; criar uma nova migração e validar uma cópia restaurada do banco.
 
 Veja [REFRESH_TOKEN_DESIGN.md](REFRESH_TOKEN_DESIGN.md), [ADR-0002](ADR-0002-distributed-token-revocation.md) e a [Issue #11](https://github.com/danmaciel/monorepo_sistema_todo_com_microservices/issues/11).
+
+## Reutilização detectada: revogação da família
+
+Após a tentativa de rotação, caso nenhuma sessão elegível tenha sido reivindicada, o serviço verifica se o token apresentado corresponde a uma sessão **já consumida, ainda dentro de sua validade absoluta e não revogada**. Nesse caso, o PostgreSQL marca como revogados **todos os registros da família**, inclusive eventuais sucessores ainda ativos:
+
+```sql
+UPDATE refresh_sessions
+SET revoked_at = CURRENT_TIMESTAMP
+WHERE family_id = (
+    SELECT family_id
+    FROM refresh_sessions
+    WHERE token_fingerprint = ?
+      AND consumed_at IS NOT NULL
+      AND revoked_at IS NULL
+      AND expires_at > CURRENT_TIMESTAMP
+)
+AND revoked_at IS NULL;
+```
+
+O fingerprint fornecido ao SQL é calculado a partir do segredo apresentado, que **nunca é armazenado em texto puro**. Tokens inexistentes, expirados ou já revogados não acionam essa regra. A invalidação ocorre após a conclusão da transação de rotação, evitando revogar dentro de um fluxo que ainda pode precisar de rollback.
+
+```mermaid
+flowchart TD
+    A["Tentar rotação"] --> B{"UPDATE ... RETURNING encontrou sessão elegível?"}
+    B -->|Sim| C["Inserir sucessor na mesma transação"]
+    C --> D["Confirmar transação e retornar sucessor"]
+    B -->|Não| E{"Token consumido, ainda válido e não revogado?"}
+    E -->|Sim| F["Revogar toda a família no PostgreSQL"]
+    E -->|Não| G["Negar sem revogar outra sessão"]
+```
+
+**Trade-off de segurança versus usabilidade:** se uma resposta for perdida após o COMMIT ou duas abas enviarem o mesmo refresh token simultaneamente, a segunda tentativa pode ser interpretada como replay e revogar uma sessão legítima. Esse comportamento `fail-closed` é deliberado nesta etapa. Antes de expor a API, será necessário decidir entre coordenação de renovação no cliente, política de tolerância/idempotência de reenvios e proteção contra o uso de tokens roubados. Uma tolerância ingênua a reuso também pode facilitar ataques.
+
+**Escopo exato:** essa revogação funciona **somente para refresh sessions no User Service**. Não invalida JWTs de acesso já emitidos no Todo Service e não constitui logout remoto ou revogação distribuída completa. A integração HTTP/frontend ainda não existe.
