@@ -147,7 +147,7 @@ npm run clean
 |--------|----------|-----------|
 | POST | `/api/users/register` | Registrar novo usuário |
 | POST | `/api/users/login` | Login de usuário |
-| GET | `/api/users/{id}` | Buscar usuário por ID |
+| GET | `/api/users/{id}` | Consultar **apenas o próprio perfil** (HTTP 403 para outro usuário) |
 | GET | `/api/users/me` | Buscar usuário autenticado |
 
 ### Todo Service (:8082)

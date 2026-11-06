@@ -46,6 +46,7 @@ def main():
     suffix = uuid.uuid4().hex[:10]
     password = "Ci-Test-" + uuid.uuid4().hex
     users = []
+    user_ids = []
     for index in range(2):
         username = f"e2e_{suffix}_{index}"
         status, registered = call("POST", "/api/users/register", {
@@ -55,6 +56,8 @@ def main():
         })
         expect(201, status, f"register user {index}")
         assert registered and registered.get("token"), "register must return JWT"
+        assert registered.get("user", {}).get("id"), "register must return user ID"
+        user_ids.append(registered["user"]["id"])
         status, logged = call("POST", "/api/users/login", {
             "username": username,
             "password": password,
@@ -62,6 +65,21 @@ def main():
         expect(200, status, f"login user {index}")
         assert logged and logged.get("token"), "login must return JWT"
         users.append(logged["token"])
+
+    # User profiles are private: the path ID must match the authenticated account.
+    status, own_profile = call("GET", "/api/users/me", token=users[0])
+    expect(200, status, "read own profile through /me")
+    assert own_profile["id"] == user_ids[0]
+
+    status, same_profile = call("GET", "/api/users/" + user_ids[0], token=users[0])
+    expect(200, status, "read own profile through /users/{id}")
+    assert same_profile["id"] == user_ids[0]
+
+    status, _ = call("GET", "/api/users/" + user_ids[0], token=users[1])
+    expect(403, status, "deny reading another user's email/profile")
+
+    status, _ = call("GET", "/api/users/" + user_ids[0])
+    assert status in (401, 403), f"anonymous profile access must be denied, got HTTP {status}"
 
     status, _ = call("POST", "/api/todos", {
         "title": "Anonymous attempt",
@@ -113,7 +131,7 @@ def main():
 
     status, _ = call("DELETE", "/api/todos/" + todo_id, token=users[0])
     expect(204, status, "delete own todo")
-    print("E2E PASSED: auth, owner isolation for list/read/update/complete/delete, CRUD")
+    print("E2E PASSED: private user profiles, auth, task owner isolation and CRUD")
 
 
 if __name__ == "__main__":

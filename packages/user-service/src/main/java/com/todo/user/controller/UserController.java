@@ -1,6 +1,7 @@
 package com.todo.user.controller;
 
 import com.todo.user.dto.*;
+import com.todo.user.exception.UserProfileForbiddenException;
 import com.todo.user.entity.User;
 import com.todo.user.security.CurrentUser;
 import com.todo.user.service.UserService;
@@ -40,6 +41,10 @@ public class UserController {
 
     @GetMapping("/{id}")
     public ResponseEntity<UserResponse> getById(@PathVariable UUID id) {
+        User requester = currentUser.getOrThrow();
+        if (!requester.getId().equals(id)) {
+            throw new UserProfileForbiddenException("Você só pode consultar seu próprio perfil");
+        }
         return ResponseEntity.ok(userService.getById(id));
     }
 
