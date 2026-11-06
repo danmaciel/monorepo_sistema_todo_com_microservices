@@ -31,7 +31,7 @@ public class RefreshSessionRotationService {
             return Optional.empty();
         }
 
-        return transactions.execute(status -> store.claimForRotation(presentedToken).map(parent -> {
+        Optional<RotationResult> rotated = transactions.execute(status -> store.claimForRotation(presentedToken).map(parent -> {
             String nextToken = RefreshTokenMaterial.generate();
             UUID nextSessionId = UUID.randomUUID();
             store.create(new RefreshSession(
@@ -43,6 +43,14 @@ public class RefreshSessionRotationService {
                     null));
             return new RotationResult(nextSessionId, nextToken);
         }));
+
+        // Run replay handling after the rotation transaction completes. A
+        // concurrent successful claimant must commit its successor before we
+        // revoke the family; never revoke in a transaction that is rolled back.
+        if (rotated.isEmpty()) {
+            store.revokeFamilyOnReplay(presentedToken);
+        }
+        return rotated;
     }
 
     /**
