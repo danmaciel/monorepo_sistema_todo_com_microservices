@@ -63,6 +63,14 @@ def main():
         assert logged and logged.get("token"), "login must return JWT"
         users.append(logged["token"])
 
+    status, _ = call("POST", "/api/todos", {
+        "title": "Anonymous attempt",
+    })
+    assert status in (401, 403), f"anonymous task creation must be denied, got HTTP {status}"
+
+    status, _ = call("GET", "/api/todos", token="invalid.jwt.token")
+    assert status in (401, 403), f"invalid JWT must be denied, got HTTP {status}"
+
     status, created = call("POST", "/api/todos", {
         "title": "Verify gateway integration",
         "description": "Created during a disposable CI run",
@@ -77,6 +85,25 @@ def main():
     status, _ = call("GET", "/api/todos/" + todo_id, token=users[1])
     expect(403, status, "reject other user's todo")
 
+    # A second user cannot discover or modify the first user's tasks.
+    status, other_list = call("GET", "/api/todos", token=users[1])
+    expect(200, status, "list second user's tasks")
+    assert other_list is not None
+    assert all(todo["id"] != todo_id for todo in other_list.get("todos", [])), (
+        "other user's task must not appear in the list"
+    )
+
+    status, _ = call("PUT", "/api/todos/" + todo_id, {
+        "title": "Unauthorized change",
+    }, token=users[1])
+    expect(403, status, "reject cross-user task update")
+
+    status, _ = call("PATCH", "/api/todos/" + todo_id + "/complete", token=users[1])
+    expect(403, status, "reject cross-user task completion")
+
+    status, _ = call("PATCH", "/api/todos/" + todo_id + "/uncomplete", token=users[1])
+    expect(403, status, "reject cross-user task reopening")
+
     status, updated = call("PATCH", "/api/todos/" + todo_id + "/complete", token=users[0])
     expect(200, status, "complete own todo")
     assert updated["completed"] is True
@@ -86,7 +113,7 @@ def main():
 
     status, _ = call("DELETE", "/api/todos/" + todo_id, token=users[0])
     expect(204, status, "delete own todo")
-    print("E2E PASSED: register, login, create/read/update/delete, owner isolation")
+    print("E2E PASSED: auth, owner isolation for list/read/update/complete/delete, CRUD")
 
 
 if __name__ == "__main__":
