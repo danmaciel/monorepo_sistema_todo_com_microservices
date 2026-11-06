@@ -27,6 +27,8 @@ O Gateway faz **roteamento estático por hostname/porta no Docker Compose**, emb
 
 Os dois serviços precisam receber o mesmo segredo forte. Um segredo simétrico compartilhado é simples para estudo, mas aumenta o impacto de vazamento. Em sistemas reais, avaliar assinatura assimétrica, emissor/audiência, rotação de chaves e validação centralizada.
 
+**Revogação distribuída:** hoje o access token dura 24 horas. O User Service recusa JWT de usuário desativado, mas o Todo Service valida o token localmente e ainda pode autorizá-lo até expirar. A análise de alternativas, trade-offs e um plano incremental estão no [ADR-0002 — Revogação de tokens entre serviços](ADR-0002-distributed-token-revocation.md). Este ADR é uma proposta: refresh tokens, Redis para revogação e cookies HttpOnly **não estão implementados**.
+
 ## Persistência e isolamento
 
 O Compose utiliza **um PostgreSQL compartilhado** e a mesma base `tododb` para User Service e Todo Service. Isso simplifica o ambiente, mas não oferece isolamento de dados ou autonomia de evolução do esquema entre serviços. Em um sistema evolutivo, estudar separação de schemas ou bancos por serviço, migrações controladas e contratos de integração.
