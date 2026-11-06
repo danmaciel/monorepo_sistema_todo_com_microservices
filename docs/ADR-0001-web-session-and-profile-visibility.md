@@ -1,12 +1,12 @@
 # ADR-0001 — Sessões web e visibilidade de perfis
 
-**Status:** Proposto — decisão sobre armazenamento do token e visibilidade de perfis pendente de definição.
+**Status:** Parcialmente aceito — acesso a perfis restrito ao próprio usuário; estratégia de armazenamento e revogação de tokens continua proposta.
 
 ## Contexto
 
 O frontend React obtém um token Bearer nos endpoints de cadastro/login e atualmente o persiste no armazenamento local do navegador através do Zustand `persist` (`auth-storage`). Esse armazenamento é acessível por JavaScript executado na mesma origem; portanto, se houver uma vulnerabilidade XSS, o token poderá ser extraído. Isso **não comprova** que exista XSS nesta aplicação.
 
-O endpoint `GET /api/users/{id}` exige autenticação, mas permite consultar dados de outro usuário, incluindo e-mail. Falta uma decisão explícita sobre quais campos de um perfil deveriam ser visíveis a terceiros.
+O endpoint `GET /api/users/{id}` anteriormente permitia consultar o perfil e o e-mail de qualquer usuário autenticado. A política adotada para este gerenciador pessoal de tarefas é **autorização por proprietário**: cada usuário só pode consultar o próprio perfil.
 
 ## Melhoria já adotada (PR associado)
 
@@ -25,13 +25,15 @@ Sem alterar o armazenamento, o frontend passa a verificar a claim `exp` ao resta
 
 **Não foi aprovada nenhuma migração de armazenamento nesta etapa.** Uma implementação futura deve explicitar tempo de vida, refresh/revogação, rotação, HTTPS e estratégia de CSRF quando aplicável.
 
-## Política de perfis (a decidir)
+## Política de perfis (aceita)
 
 - `GET /api/users/me`: retorna o usuário autenticado.
-- `GET /api/users/{id}`: atualmente retorna ID, nome de usuário, e-mail e criação para qualquer cliente autenticado com um UUID existente.
+- `GET /api/users/{id}`: retorna os dados **somente quando** o ID solicitado corresponde ao usuário autenticado; caso contrário, responde HTTP 403, antes da consulta ao banco.
 - `GET /api/users/exists/{id}`: atualmente permite consultar existência de conta para clientes autenticados.
 
-Alternativas: perfil público mínimo (sem e-mail), acesso exclusivamente ao próprio perfil ou permissões administrativas explícitas. **Até que a política seja definida, não ampliar o uso desses endpoints em interfaces públicas.**
+**Justificativa:** o domínio de tarefas pessoais não exige visualização pública de e-mail nem compartilhamento de perfis. A restrição evita revelar dados pessoais em consultas cruzadas. O endpoint `/me` continua como caminho preferencial para o perfil autenticado.
+
+**Ressalva:** `/users/exists/{id}` ainda permite verificar a existência de usuários mediante autenticação; permanece sob revisão separada porque outros consumidores podem depender dessa consulta. O fluxo de sessão web (incluindo refresh e revogação) segue pendente.
 
 ## Limitações conhecidas
 
@@ -42,8 +44,8 @@ Alternativas: perfil público mínimo (sem e-mail), acesso exclusivamente ao pr�
 
 ## Critérios antes de marcar a decisão como aceita
 
-1. Confirmar a regra de visibilidade de perfis e os dados que podem ser retornados.
+1. ~~Confirmar a regra de visibilidade de perfis~~ — definido acesso ao próprio perfil; validado por testes de controller e E2E.
 2. Selecionar a estratégia de sessão web, incluindo refresh e logout.
-3. Testar autenticação e autorização com dois usuários no E2E.
+3. ~~Testar autorização de perfis com dois usuários no E2E~~ — perfil próprio HTTP 200, perfil de outro usuário HTTP 403 e acesso anônimo negado.
 4. Validar comportamento após expiração/revogação nos dois microsserviços.
 5. Atualizar este ADR e registrar consequências da decisão.
