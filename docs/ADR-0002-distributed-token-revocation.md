@@ -80,3 +80,7 @@ O desenho não afirma que um cookie, endpoint de refresh ou armazenamento de ses
 - [ADR-0001: sessões web e visibilidade de perfis](ADR-0001-web-session-and-profile-visibility.md)
 - [Arquitetura atual](ARCHITECTURE.md)
 - [Issue #6 — segurança de autenticação](https://github.com/danmaciel/monorepo_sistema_todo_com_microservices/issues/6)
+
+## Progresso de implementação — modelo isolado (etapa 1)
+
+Foi criada uma implementação **sem integração** com material opaco de 256 bits, fingerprint SHA-256 e um registro de domínio imutável para sessão, com testes unitários. Ela ainda **não** grava no PostgreSQL, não implementa endpoints, não emite refresh token no login, não realiza rotação nem garante revogação entre serviços. Veja [Laboratório de sessão de refresh](STUDY_REFRESH_SESSION.md). O status do ADR permanece **proposto** até a validação do fluxo de ponta a ponta.
