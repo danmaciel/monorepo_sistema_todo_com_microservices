@@ -58,7 +58,7 @@ CORS no Gateway está limitado às origens locais `http://localhost:3000` e `htt
 ## Próximas melhorias recomendadas
 
 - Ampliar o E2E existente com cenários de indisponibilidade, expiração de token e contratos entre serviços.
-- Separar dados dos serviços e introduzir Flyway ou Liquibase.
+- Separar os dados de cada serviço e estender as migrações Flyway do User Service para substituir gradualmente o `ddl-auto: update`.
 - Migrar segredos e configuração de produção para gerenciador de segredos.
 - Evoluir logs estruturados, métricas, alertas e correlação com os traces já implementados.
 - Revisar autenticação com chaves assimétricas e autorização baseada em políticas.
