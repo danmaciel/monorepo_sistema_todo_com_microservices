@@ -34,8 +34,9 @@ O Compose utiliza **um PostgreSQL compartilhado** e a mesma base `tododb` para U
 ## Observabilidade e resiliência
 
 - Spring Boot Actuator expõe os endpoints de saúde e informação configurados.
-- Ainda não há evidência de tracing distribuído, métricas centralizadas, circuit breakers ou testes de falha entre serviços.
-- Os testes de serviço são unitários e usam mocks; **não substituem** testes com PostgreSQL nem testes ponta a ponta via Gateway.
+- Tracing distribuído já está implementado no Gateway, User Service e Todo Service, exportando spans para o Zipkin. Consulte [o guia de tracing](TRACING.md).
+- O workflow [Docker Compose E2E](../.github/workflows/e2e.yml) executa cadastro, login, operações com tarefas, testes de autorização entre usuários e verifica a presença de spans no Zipkin.
+- Os testes Java unitários usam mocks; o E2E usa PostgreSQL real via Compose, mas isso não substitui testes de carga, resiliência ou migração. Ainda não há circuit breakers, retries controlados ou observabilidade completa de produção.
 
 ## Configuração segura
 
@@ -54,8 +55,8 @@ CORS no Gateway está limitado às origens locais `http://localhost:3000` e `htt
 
 ## Próximas melhorias recomendadas
 
-- Teste de integração HTTP com Gateway, User Service, Todo Service e PostgreSQL.
+- Ampliar o E2E existente com cenários de indisponibilidade, expiração de token e contratos entre serviços.
 - Separar dados dos serviços e introduzir Flyway ou Liquibase.
 - Migrar segredos e configuração de produção para gerenciador de segredos.
-- Centralizar logs e adicionar tracing OpenTelemetry.
+- Evoluir logs estruturados, métricas, alertas e correlação com os traces já implementados.
 - Revisar autenticação com chaves assimétricas e autorização baseada em políticas.
