@@ -92,3 +92,7 @@ Foi adicionada uma migração Flyway para a tabela de sessões e um repositório
 ## Progresso — rotação transacional interna (etapa 3)
 
 O `RefreshSessionRotationService` agora usa uma única transação JDBC para reivindicar o token anterior por `UPDATE ... RETURNING` e inserir seu sucessor. Os testes com PostgreSQL verificam que duas tentativas simultâneas produzem no máximo um sucessor, que a expiração absoluta/família são preservadas e que falha de inserção provoca rollback. O novo segredo só é devolvido ao chamador interno após o COMMIT. **Ainda não há endpoint de refresh, emissão no login, verificação de conta ativa na rotação, proteção de replay por família nem integração web**, portanto não existe uma solução de renovação de sessões utilizável por clientes. Veja [Persistência e concorrência](REFRESH_TOKEN_PERSISTENCE.md).
+
+## Progresso — verificação da conta na rotação (etapa 4)
+
+A rotação interna agora só pode consumir uma sessão se houver uma conta `users` existente e `enabled = TRUE`. O `UPDATE` condicional inclui um `EXISTS ... FOR SHARE`, que serializa a verificação contra mudanças concorrentes no registro do usuário. Testes PostgreSQL confirmam que contas desativadas ou excluídas não recebem sucessores e que a recusa não consome o token original. **Esta etapa ainda não expõe refresh/logout HTTP, não revoga JWTs de acesso existentes no Todo Service e não resolve a política de replay e invalidação de famílias.**
