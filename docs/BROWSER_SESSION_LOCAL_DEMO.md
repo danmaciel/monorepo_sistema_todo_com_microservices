@@ -54,9 +54,15 @@ Ao mudar entre os modos, limpe no navegador os dados antigos do aplicativo (`aut
 
 ## Limitações conhecidas
 
-- **Não temos ainda um teste de navegador automatizado.** O CI executa testes unitários, build do React e testes HTTP reais via Gateway usando Python; não valida o navegador com certificados, regras de cookie ou múltiplas abas.
+- O CI também executa um teste automatizado com **Chromium e Playwright em HTTPS local**, usando certificado temporário e contexto de navegador isolado. Esse teste cobre login, cookie HttpOnly/Secure/SameSite, criação e recuperação de tarefa, renovação após recarregar, ausência de access JWT/CSRF no armazenamento do navegador e logout. **Não substitui validação em outros navegadores ou testes de múltiplas abas**.
 - A coordenação de refresh é apenas **por aba**. Duas abas ou uma resposta perdida após COMMIT ainda podem provocar replay e revogação da família; será necessário definir a política de recuperação.
 - Access JWT continua com **24 horas de validade** e não é imediatamente revogado por logout. Todo Service continua validando JWT até expiração. Para uma sessão web, recomenda-se reduzir o TTL após a migração do cliente.
 - A funcionalidade opt-in está separada do frontend Docker padrão, que permanece no modo antigo. Para mostrar o novo fluxo use a configuração Vite acima.
 - Se o proxy HTTPS, o certificado local confiável ou as configurações explícitas de origem não estiverem corretos, o fluxo deve falhar de forma visível, **sem desabilitar Secure ou as verificações CSRF/Origin**.
 - O cadastro continua usando a API legada para criar a conta e, no novo modo, realiza login de sessão em seguida. A resposta JWT legada do cadastro é descartada pelo frontend.
+
+## Evidência automatizada de navegador
+
+O workflow `.github/workflows/e2e.yml` instala Playwright Python e Chromium, inicia o frontend Vite com `VITE_SESSION_AUTH=true` e um certificado HTTPS descartável, e executa `scripts/e2e_browser.py`. O teste utiliza um perfil de navegador vazio e uma conta temporária. Ignora a confiança no certificado **somente no contexto de teste**, mantendo HTTPS e o atributo `Secure`; essa configuração não deve ser usada em navegação real.
+
+O teste de API existente continua verificando rotação, replay e restrições de Origin/CSRF pelo Gateway. A verificação do navegador complementa, mas não substitui, esses cenários. O script não imprime credenciais, JWT, CSRF ou cookies.
