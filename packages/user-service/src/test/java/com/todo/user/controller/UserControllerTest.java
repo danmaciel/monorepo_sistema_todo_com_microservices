@@ -48,4 +48,29 @@ class UserControllerTest {
 
         verifyNoInteractions(userService);
     }
+
+    @Test
+    void ownerCanCheckOwnExistence() {
+        UUID ownerId = UUID.randomUUID();
+        User owner = User.builder().id(ownerId).username("owner").build();
+
+        when(currentUser.getOrThrow()).thenReturn(owner);
+        when(userService.existsById(ownerId)).thenReturn(true);
+
+        var response = controller.existsById(ownerId);
+
+        assertEquals(200, response.getStatusCode().value());
+        assertEquals(Boolean.TRUE, response.getBody());
+        verify(userService).existsById(ownerId);
+    }
+
+    @Test
+    void authenticatedUserCannotCheckAnotherAccountsExistence() {
+        User caller = User.builder().id(UUID.randomUUID()).username("caller").build();
+        UUID otherId = UUID.randomUUID();
+        when(currentUser.getOrThrow()).thenReturn(caller);
+
+        assertThrows(UserProfileForbiddenException.class, () -> controller.existsById(otherId));
+        verifyNoInteractions(userService);
+    }
 }
