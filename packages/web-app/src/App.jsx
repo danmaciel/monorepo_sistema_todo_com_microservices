@@ -29,8 +29,9 @@ function ProtectedRoute({ children }) {
 function PublicRoute({ children }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
   const token = useAuthStore((state) => state.token)
+  const csrf = useAuthStore((state) => state.csrf)
   const isBootstrapping = useAuthStore((state) => state.isBootstrapping)
-  const hasActiveSession = isAuthenticated && isJwtActive(token)
+  const hasActiveSession = isAuthenticated && (sessionMode ? Boolean(csrf) : isJwtActive(token))
 
   if (sessionMode && isBootstrapping) {
     return <div role="status" className="p-8 text-center">Restaurando sessão...</div>
