@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -47,7 +48,7 @@ public class RefreshSessionRotationService {
                         RefreshTokenMaterial.fingerprint(nextToken),
                         parent.expiresAt(),
                         null));
-                return new RotationResult(nextSessionId, nextToken);
+                return new RotationResult(nextSessionId, nextToken, parent.userId(), parent.expiresAt());
             });
 
             // The same family lock protects both successor insertion and replay
@@ -81,10 +82,10 @@ public class RefreshSessionRotationService {
      * Carries the successor's raw token only to the immediate caller.
      * It must never be logged, persisted in plaintext or placed in tracing attributes.
      */
-    public record RotationResult(UUID sessionId, String token) {
+    public record RotationResult(UUID sessionId, String token, UUID userId, Instant expiresAt) {
         @Override
         public String toString() {
-            return "RotationResult[sessionId=" + sessionId + ", token=[REDACTED]]";
+            return "RotationResult[sessionId=" + sessionId + ", token=[REDACTED], userId=" + userId + ", expiresAt=" + expiresAt + "]";
         }
     }
 }

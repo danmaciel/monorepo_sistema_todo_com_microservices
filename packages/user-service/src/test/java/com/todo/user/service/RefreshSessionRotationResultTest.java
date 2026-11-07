@@ -4,6 +4,7 @@ import com.todo.user.security.RefreshTokenMaterial;
 import org.junit.jupiter.api.Test;
 
 import java.util.UUID;
+import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -14,7 +15,8 @@ class RefreshSessionRotationResultTest {
         String token = RefreshTokenMaterial.generate();
         UUID sessionId = UUID.randomUUID();
 
-        var result = new RefreshSessionRotationService.RotationResult(sessionId, token);
+        var result = new RefreshSessionRotationService.RotationResult(
+                sessionId, token, UUID.randomUUID(), Instant.now().plusSeconds(3600));
         String representation = result.toString();
 
         assertTrue(representation.contains(sessionId.toString()));

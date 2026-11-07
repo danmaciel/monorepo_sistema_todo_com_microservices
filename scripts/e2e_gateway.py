@@ -29,6 +29,93 @@ def call(method, path, data=None, token=None):
         return error.code, None
 
 
+def session_http(method, path, *, data=None, cookie=None, csrf=None, origin="http://localhost:3000"):
+    """Call the opt-in cookie API; never display credential-bearing headers."""
+    headers = {"Origin": origin, "Content-Type": "application/json"}
+    if cookie:
+        headers["Cookie"] = cookie
+    if csrf:
+        headers["X-CSRF-Token"] = csrf
+    body = json.dumps(data).encode("utf-8") if data is not None else None
+    request = urllib.request.Request(BASE + path, body, headers, method=method)
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            raw = response.read()
+            return response.status, json.loads(raw) if raw else None, response.headers
+    except urllib.error.HTTPError as error:
+        error.read()
+        return error.code, None, error.headers
+
+
+def refresh_cookie_from(headers):
+    value = headers.get("Set-Cookie", "")
+    assert value.startswith("__Secure-todo-refresh="), "missing secure refresh cookie"
+    for required in ("HttpOnly", "Secure", "SameSite=Strict", "Path=/api/users"):
+        assert required in value, f"refresh cookie missing {required}"
+    return value.split(";", 1)[0]
+
+
+def check_refresh_http_scenario(username, password):
+    """Exercise real login, cookie rotation, CSRF, logout and replay via Gateway."""
+    status, auth, headers = session_http("POST", "/api/users/session/login",
+                                        data={"username": username, "password": password})
+    expect(200, status, "opt-in session login")
+    assert auth and auth.get("token"), "session login must provide access JWT"
+    previous_cookie = refresh_cookie_from(headers)
+    previous_csrf = headers.get("X-CSRF-Token")
+    assert previous_csrf and previous_cookie.split("=", 1)[1] not in json.dumps(auth), (
+        "refresh secret leaked in response body"
+    )
+
+    status, _, _ = session_http("POST", "/api/users/refresh",
+                               cookie=previous_cookie, csrf="invalid")
+    expect(403, status, "invalid CSRF must not rotate session")
+    status, _, _ = session_http("POST", "/api/users/refresh",
+                               cookie=previous_cookie, csrf=previous_csrf,
+                               origin="https://untrusted.example.invalid")
+    assert status in (403, 404), "unknown Origin must not rotate session"
+
+    status, refreshed, headers = session_http("POST", "/api/users/refresh",
+                                             cookie=previous_cookie, csrf=previous_csrf)
+    expect(200, status, "rotate refresh session")
+    assert refreshed and refreshed.get("token"), "rotation must provide new access JWT"
+    successor_cookie = refresh_cookie_from(headers)
+    successor_csrf = headers.get("X-CSRF-Token")
+    assert successor_cookie != previous_cookie, "rotation must replace cookie"
+    assert successor_csrf and successor_csrf != previous_csrf, "rotation must replace CSRF"
+    assert successor_cookie.split("=", 1)[1] not in json.dumps(refreshed)
+    status, profile = call("GET", "/api/users/me", token=refreshed["token"])
+    expect(200, status, "newly refreshed access JWT")
+    assert profile.get("username") == username
+
+    status, _, headers = session_http("POST", "/api/users/logout",
+                                     cookie=successor_cookie, csrf=successor_csrf)
+    expect(204, status, "server-side refresh family logout")
+    assert "Max-Age=0" in headers.get("Set-Cookie", ""), "logout must delete refresh cookie"
+
+    status, _, _ = session_http("POST", "/api/users/refresh",
+                               cookie=successor_cookie, csrf=successor_csrf)
+    expect(401, status, "revoked refresh token must not rotate")
+
+    # A fresh family demonstrates consumed-token replay revocation.
+    status, _, headers = session_http("POST", "/api/users/session/login",
+                                      data={"username": username, "password": password})
+    expect(200, status, "second opt-in session login")
+    first_cookie = refresh_cookie_from(headers)
+    first_csrf = headers.get("X-CSRF-Token")
+    status, _, headers = session_http("POST", "/api/users/refresh",
+                                     cookie=first_cookie, csrf=first_csrf)
+    expect(200, status, "second family rotation")
+    next_cookie = refresh_cookie_from(headers)
+    next_csrf = headers.get("X-CSRF-Token")
+    status, _, _ = session_http("POST", "/api/users/refresh",
+                               cookie=first_cookie, csrf=first_csrf)
+    expect(401, status, "consumed refresh replay must fail")
+    status, _, _ = session_http("POST", "/api/users/refresh",
+                               cookie=next_cookie, csrf=next_csrf)
+    expect(401, status, "replay must revoke the entire family")
+
+
 def check_gateway_cors():
     """Check allowed and disallowed browser preflight requests at the Gateway."""
     for origin, allowed in (
@@ -135,13 +222,15 @@ def main():
         assert logged and logged.get("token"), "login must return JWT"
         users.append(logged["token"])
 
-    # Reserved refresh/logout routes must never become usable by accident.
-    # They are deliberately disabled in CI and no cookie-based HTTP flow exists.
-    for reserved in ("/api/users/refresh", "/api/users/logout"):
-        status, _ = call("POST", reserved)
-        assert status in (401, 403, 404), (
-            f"reserved session endpoint unexpectedly exposed: {reserved}, HTTP {status}"
-        )
+    if os.environ.get("E2E_REFRESH_ENABLED") == "true":
+        check_refresh_http_scenario(f"e2e_{suffix}_0", password)
+    else:
+        # Normal local deployments keep all cookie endpoints disabled by default.
+        for reserved in ("/api/users/session/login", "/api/users/refresh", "/api/users/logout"):
+            status, _ = call("POST", reserved)
+            assert status in (401, 403, 404), (
+                f"reserved session endpoint unexpectedly exposed: {reserved}, HTTP {status}"
+            )
 
     # User profiles are private: the path ID must match the authenticated account.
     status, own_profile = call("GET", "/api/users/me", token=users[0])
