@@ -135,6 +135,14 @@ def main():
         assert logged and logged.get("token"), "login must return JWT"
         users.append(logged["token"])
 
+    # Reserved refresh/logout routes must never become usable by accident.
+    # They are deliberately disabled in CI and no cookie-based HTTP flow exists.
+    for reserved in ("/api/users/refresh", "/api/users/logout"):
+        status, _ = call("POST", reserved)
+        assert status in (401, 403, 404), (
+            f"reserved session endpoint unexpectedly exposed: {reserved}, HTTP {status}"
+        )
+
     # User profiles are private: the path ID must match the authenticated account.
     status, own_profile = call("GET", "/api/users/me", token=users[0])
     expect(200, status, "read own profile through /me")
