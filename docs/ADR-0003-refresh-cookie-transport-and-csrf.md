@@ -95,3 +95,14 @@ O mecanismo ainda não está ativo. Para utilizá-lo com segurança é necessár
 5. Testar, via navegador e Gateway em HTTPS, falta/adulteração de cabeçalho, origens hostis, requisições de formulários HTML, abas simultâneas e perda de resposta após commit.
 
 Esta classe é **apenas o mecanismo criptográfico**, não a defesa CSRF completa de nenhum endpoint. O login e os contratos de refresh/logout HTTP continuam inalterados; `allowCredentials` permanece `false`.
+
+
+## Fronteira HTTP fail-closed para rotas reservadas
+
+O `RefreshHttpBoundaryFilter` está registrado no User Service, mas **desabilitado por padrão**, usando `auth.refresh.http-enabled=false` (valor padrão do código). Ele afeta exclusivamente as rotas internas `/users/refresh` e `/users/logout` (rotas públicas futuras `/api/users/refresh` e `/api/users/logout` via Gateway). Quando desabilitado, rejeita requisições não-OPTIONS para essas rotas com 404, inclusive se um controller for adicionado por engano. Rotas de login, cadastro, perfis e tarefas permanecem intactas.
+
+Se for habilitado explicitamente em um ambiente de teste futuro, a inicialização exige `auth.refresh.allowed-origins` (lista explícita de origens separadas por vírgulas) e `auth.refresh.csrf-key-base64` (segredo independente com pelo menos 32 bytes, codificado em Base64 normal). O filtro exige **POST**, `Origin` exato, exatamente um cookie `__Secure-todo-refresh` e exatamente um cabeçalho `X-CSRF-Token` HMAC válido para aquele refresh token; qualquer falta ou duplicação é rejeitada com 403. `OPTIONS` é encaminhado para a política CORS existente, sem executar ações de sessão.
+
+**Isso ainda não implementa refresh ou logout:** mesmo com a fronteira habilitada não há controller para renovar tokens ou revogar sessões. Não habilitar `auth.refresh.http-enabled` em uma implantação real até que os handlers, o transporte HTTPS, a política de origin/CSRF, a emissão/delivery de tokens, CORS com credenciais, observabilidade e E2E do navegador sejam implementados conjuntamente. A configuração não altera `http.csrf` global, validade dos JWTs ou `allowCredentials=false`.
+
+Os testes unitários simulam pedidos HTTP aceitos/rejeitados pela fronteira; o E2E padrão continua verificando os fluxos legados, sem habilitar cookies. Isso não comprova comportamento real de sessões por cookie nem substitui revisão de autenticação.
