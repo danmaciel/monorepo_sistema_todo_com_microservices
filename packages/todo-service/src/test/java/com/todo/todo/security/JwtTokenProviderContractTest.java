@@ -57,4 +57,35 @@ class JwtTokenProviderContractTest {
     void rejectsMalformedToken() {
         assertFalse(provider.validateToken("not.a.jwt"));
     }
+
+    @Test
+    void rejectsSignedTokenWithoutExpiration() {
+        String token = Jwts.builder()
+                .subject(UUID.randomUUID().toString())
+                .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8)))
+                .compact();
+
+        assertFalse(provider.validateToken(token));
+    }
+
+    @Test
+    void rejectsSignedTokenWithoutSubject() {
+        String token = Jwts.builder()
+                .expiration(new Date(System.currentTimeMillis() + 60_000L))
+                .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8)))
+                .compact();
+
+        assertFalse(provider.validateToken(token));
+    }
+
+    @Test
+    void rejectsSignedTokenWithNonUuidSubject() {
+        String token = Jwts.builder()
+                .subject("not-a-uuid")
+                .expiration(new Date(System.currentTimeMillis() + 60_000L))
+                .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8)))
+                .compact();
+
+        assertFalse(provider.validateToken(token));
+    }
 }
