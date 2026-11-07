@@ -17,7 +17,7 @@ import java.util.List;
 /**
  * Fail-closed HTTP boundary for future refresh/logout routes.
  *
- * No refresh or logout controller is installed yet. Disabled by default, even
+ * Session login, refresh and logout handlers are gated off by default, even
  * if someone later introduces a matching controller without enabling the
  * session transport explicitly.
  */
@@ -58,7 +58,7 @@ public class RefreshHttpBoundaryFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getServletPath();
-        return !("/users/refresh".equals(path) || "/users/logout".equals(path));
+        return !("/users/session/login".equals(path) || "/users/refresh".equals(path) || "/users/logout".equals(path));
     }
 
     @Override
@@ -79,6 +79,14 @@ public class RefreshHttpBoundaryFilter extends OncePerRequestFilter {
             response.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
             return;
         }
+        if ("/users/session/login".equals(request.getServletPath())) {
+            if (!origins.permits(request)) {
+                response.sendError(HttpServletResponse.SC_FORBIDDEN);
+                return;
+            }
+            chain.doFilter(request, response);
+            return;
+        }
         String rawToken = singleRefreshCookie(request);
         String csrfHeader = singleCsrfHeader(request);
         if (!origins.permits(request)
@@ -89,6 +97,18 @@ public class RefreshHttpBoundaryFilter extends OncePerRequestFilter {
             return;
         }
         chain.doFilter(request, response);
+    }
+
+    /** Used only by the opt-in session handlers to issue a response CSRF token. */
+    public String issueCsrf(String rawRefreshToken) {
+        if (!enabled) {
+            throw new IllegalStateException("Refresh HTTP is disabled");
+        }
+        return csrf.issue(rawRefreshToken);
+    }
+
+    public boolean isEnabled() {
+        return enabled;
     }
 
     private static String singleRefreshCookie(HttpServletRequest request) {
