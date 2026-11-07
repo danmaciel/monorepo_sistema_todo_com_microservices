@@ -55,3 +55,12 @@ Sem alterar o armazenamento, o frontend passa a verificar a claim `exp` ao resta
 O User Service verifica `enabled` antes de autenticar um bearer token associado à conta. Testes unitários do filtro validam quatro situações: usuário ativo, desativado, excluído e JWT inválido. O teste E2E produz um JWT **corretamente assinado, porém expirado**, com o segredo efêmero gerado no CI, e verifica sua rejeição tanto pelo User Service quanto pelo Todo Service, sem publicar valores de token.
 
 **Não existe ainda revogação distribuída:** logout no browser apenas descarta o token local e o Todo Service segue validando tokens auto-contidos até expirarem. Uma solução de revogação precisa definir requisitos de disponibilidade, latência, cache, invalidação, identidade emissora/audiência e a dependência síncrona ou assíncrona entre serviços. Não introduzir chamadas entre serviços apenas para marcar esse requisito como concluído.
+
+
+## Preparação do Gateway antes de cookies (sem habilitação de refresh HTTP)
+
+A configuração do Spring Cloud Gateway foi atualizada para o prefixo suportado `spring.cloud.gateway.server.webflux`, inclusive rotas, CORS e filtros, e o acesso do endpoint Actuator `gateway` foi definido como `read-only` (sem ampliar sua exposição HTTP atual). O E2E verifica preflights para duas origens locais permitidas e uma origem desconhecida.
+
+**O Gateway permanece com `allowCredentials: false`.** Isso é intencional: nenhum fluxo HTTP de refresh baseado em cookie foi habilitado. O User Service tem configuração de CORS própria com credenciais permitidas, mas ela não deve ser interpretada como habilitação de refresh via Gateway. Antes de usar cookies, é preciso alinhar políticas entre Gateway e User Service, definir autenticação por cookie, `SameSite`, domínio/caminho, `Secure`, verificação de `Origin`, CSRF e testes em navegador.
+
+Não transformar `allowCredentials` em `true` isoladamente: CORS não substitui autenticação nem controle CSRF e não oferece proteção para clientes fora do navegador.
