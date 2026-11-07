@@ -16,6 +16,9 @@ public class JwtTokenProvider {
     private static final String TOKEN_ISSUER = "todo-user-service";
     private static final String TOKEN_AUDIENCE = "todo-api";
 
+    @Value("${jwt.accept-legacy-without-claims:true}")
+    private boolean acceptLegacyWithoutClaims = true;
+
     private final SecretKey secretKey;
     private final long jwtExpiration;
 
@@ -74,7 +77,16 @@ public class JwtTokenProvider {
             }
 
             UUID.fromString(claims.getSubject());
-            return true;
+
+            String issuer = claims.getIssuer();
+            var audience = claims.getAudience();
+            if (issuer == null && (audience == null || audience.isEmpty())) {
+                return acceptLegacyWithoutClaims;
+            }
+
+            return TOKEN_ISSUER.equals(issuer)
+                    && audience != null
+                    && audience.contains(TOKEN_AUDIENCE);
         } catch (JwtException | IllegalArgumentException e) {
             return false;
         }
