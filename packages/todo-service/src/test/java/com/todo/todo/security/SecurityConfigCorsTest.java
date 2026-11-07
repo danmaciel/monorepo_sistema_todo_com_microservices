@@ -21,6 +21,9 @@ class SecurityConfigCorsTest {
         assertNotNull(cors);
         assertEquals("http://localhost:3000", cors.checkOrigin("http://localhost:3000"));
         assertEquals("http://localhost:5173", cors.checkOrigin("http://localhost:5173"));
+        assertEquals("https://localhost:3000", cors.checkOrigin("https://localhost:3000"));
+        assertNull(cors.checkOrigin("https://localhost:3001"));
+        assertNull(cors.checkOrigin("https://untrusted.example"));
         assertNull(cors.checkOrigin("https://untrusted.example"));
         assertNull(cors.checkOrigin("http://localhost:9999"));
         assertFalse(cors.getAllowedOrigins().contains("*"));
