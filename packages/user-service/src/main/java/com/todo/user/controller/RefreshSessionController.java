@@ -60,7 +60,7 @@ public class RefreshSessionController {
      * sufficient alone: an explicit allowed Origin and an active DB session
      * are required. The refresh token is never returned to JavaScript.
      */
-    @GetMapping("/session/csrf")
+    @PostMapping("/session/csrf")
     public ResponseEntity<Void> csrfBootstrap(HttpServletRequest request) {
         requireEnabled();
         String token = null;
