@@ -5,10 +5,11 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * Immutable description of a refresh session; not yet persisted or exposed by an API.
+ * Immutable description of refresh-session identity, fingerprint and expiration.
  *
- * Session state must be checked and replaced under an atomic database transaction
- * when refresh rotation is implemented. This model alone does not prevent replay.
+ * The PostgreSQL store handles persistence, one-time consumption and rotation.
+ * This record alone does not check the consumed state or prevent replay.
+ * Refresh sessions are not yet exposed by the authentication HTTP API.
  */
 public record RefreshSession(
         UUID id,
