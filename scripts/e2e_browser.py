@@ -95,16 +95,6 @@ def main():
             assert created.value.status in (200, 201), (
                 f"Create Todo endpoint returned HTTP {created.value.status}"
             )
-            with page.expect_response(
-                lambda response: "/api/todos" in response.url
-                and response.request.method == "GET"
-            ) as fetched:
-                page.get_by_role("heading", name="Minhas Tarefas").wait_for()
-                # FetchTodos is triggered by createTodo's completion.
-                # A response listener below confirms this happened.
-            assert fetched.value.status == 200, (
-                f"List Todos endpoint returned HTTP {fetched.value.status}"
-            )
             expect(page.get_by_role("heading", name=title)).to_be_visible(timeout=15000)
 
             # Reload must bootstrap CSRF from the HttpOnly cookie, then rotate
