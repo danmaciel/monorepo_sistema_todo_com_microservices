@@ -134,6 +134,15 @@ def main():
                 f"{path} accepted a signed JWT with invalid issuer/audience: HTTP {status}"
             )
 
+    # E2E runs both services in strict mode. Properly signed legacy JWTs
+    # without issuer/audience must be rejected, even before they expire.
+    legacy_token = signed_test_token(user_ids[0])
+    for path in ("/api/users/me", "/api/todos"):
+        status, _ = call("GET", path, token=legacy_token)
+        assert status in (401, 403), (
+            f"{path} accepted a legacy JWT while strict validation is required: HTTP {status}"
+        )
+
     status, _ = call("POST", "/api/todos", {
         "title": "Anonymous attempt",
     })

@@ -44,6 +44,8 @@ mvn -f packages/todo-service/pom.xml -Dtest=JwtTokenProviderContractTest test
 
 Os testes utilizam credenciais fictícias. A aprovação do CI demonstra os cenários cobertos, não certifica segurança absoluta ou validação em produção.
 
+O workflow [Docker Compose E2E](../.github/workflows/e2e.yml) executa os dois serviços em **modo estrito apenas no ambiente descartável de CI**, usando `JWT_ACCEPT_LEGACY_WITHOUT_CLAIMS=false`, e verifica a rejeição de JWTs corretamente assinados sem `iss`/`aud`. O Docker Compose local preserva o padrão `true` para compatibilidade. Essa verificação não significa que o modo estrito tenha sido ativado em instalações existentes.
+
 ## Limitações e decisões em aberto
 
 - O frontend mantém o bearer token no `localStorage`, que é acessível por scripts na mesma origem em caso de XSS.

@@ -20,6 +20,8 @@ jobs:
           echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
           echo "JWT_SECRET=$(openssl rand -hex 48)" >> "$GITHUB_ENV"
       - name: Build and start backend services
+        env:
+          JWT_ACCEPT_LEGACY_WITHOUT_CLAIMS: 'false'
         run: docker compose up --build -d postgres zipkin eureka user-service todo-service gateway
       - name: Verify service availability and business scenario via Gateway
         run: python3 scripts/e2e_gateway.py

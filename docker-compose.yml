@@ -102,6 +102,7 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/tododb
       SPRING_DATASOURCE_USERNAME: todouser
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in your environment}
+      JWT_ACCEPT_LEGACY_WITHOUT_CLAIMS: ${JWT_ACCEPT_LEGACY_WITHOUT_CLAIMS:-true}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in your environment}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka/
     ports:
@@ -130,6 +131,7 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/tododb
       SPRING_DATASOURCE_USERNAME: todouser
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in your environment}
+      JWT_ACCEPT_LEGACY_WITHOUT_CLAIMS: ${JWT_ACCEPT_LEGACY_WITHOUT_CLAIMS:-true}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in your environment}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka/
     ports:
