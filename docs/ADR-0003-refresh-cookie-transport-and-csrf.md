@@ -78,3 +78,20 @@ A classe `RefreshRequestOriginPolicy` implementa a verificação exata e *fail-c
 **A classe ainda não está ligada ao Spring Security nem a controllers**: é uma política testada isoladamente, não uma defesa ativa de um endpoint existente. A lista de origens em produção deverá vir de configuração explícita, compatível com a topologia HTTPS aprovada, e a instalação da política deverá ocorrer junto do endpoint e dos testes E2E.
 
 **Origin não é autenticação e não substitui token CSRF.** Clientes HTTP não-browser podem falsificar esse cabeçalho; por isso o fluxo futuro deve combinar cookie/refresh token, verificação de Origin e o mecanismo CSRF definido para a sessão. A configuração CORS continua sem credenciais.
+
+
+## Etapa isolada: token CSRF ligado ao refresh token
+
+A classe **não conectada a controllers** `RefreshCsrfTokenPolicy` produz um token CSRF derivado por HMAC-SHA-256, com chave privada independente de pelo menos 32 bytes, sobre um contexto de domínio fixo e o fingerprint SHA-256 do refresh token opaco. O cliente futuro apresentaria esse valor por `X-CSRF-Token`, enquanto o refresh token viajaria somente em cookie HttpOnly. A comparação usa `MessageDigest.isEqual`, e valores ausentes, malformados, incorretos ou associados a outra sessão são rejeitados.
+
+O token CSRF gerado **não é o refresh token e não permite recuperá-lo**. Como é vinculado ao token opaco, a rotação gera também um novo valor CSRF e invalida o anterior. Testes isolados cobrem vínculo por sessão e chave, adulteração, dados ausentes e chave fraca. **Nenhuma chave de produção foi adicionada ao repositório ou à configuração da aplicação.**
+
+O mecanismo ainda não está ativo. Para utilizá-lo com segurança é necessário:
+
+1. Provisionar e proteger uma chave CSRF **independente de `JWT_SECRET`**, consistente em todas as instâncias do User Service, com política de rotação e implantação. Não usar segredos fixos do código de teste.
+2. Entregar o token CSRF ao próprio frontend autorizado após login e a cada refresh, **sem expor o refresh token**. Após recarregar a página, definir um bootstrap autenticado pelo cookie que só libere o token CSRF para a origem permitida, com `Cache-Control: no-store`, validação de Origin e CORS com credenciais explicitamente restritas.
+3. Instalar e testar em conjunto a checagem de `Origin`, a apresentação de `X-CSRF-Token`, o cookie `HttpOnly; Secure; SameSite`, a autenticação de sessão no banco e a proteção do Gateway. A leitura de respostas cross-origin deve ficar inacessível a origens não permitidas; `SameSite` e CORS isoladamente não substituem a checagem do cabeçalho.
+4. Definir o fluxo de atualização atômica dos tokens após a rotação e de recuperação de falha de rede. Se o cliente mantiver o CSRF antigo após trocar o cookie, a próxima renovação será negada. Se uma resposta de rotação for perdida, a política atual de replay pode revogar a família.
+5. Testar, via navegador e Gateway em HTTPS, falta/adulteração de cabeçalho, origens hostis, requisições de formulários HTML, abas simultâneas e perda de resposta após commit.
+
+Esta classe é **apenas o mecanismo criptográfico**, não a defesa CSRF completa de nenhum endpoint. O login e os contratos de refresh/logout HTTP continuam inalterados; `allowCredentials` permanece `false`.
