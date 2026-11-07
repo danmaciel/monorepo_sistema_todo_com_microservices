@@ -3,6 +3,7 @@ package com.todo.user.repository;
 import com.todo.user.security.RefreshSession;
 import com.todo.user.security.RefreshTokenMaterial;
 import com.todo.user.service.RefreshSessionRotationService;
+import com.todo.user.service.RefreshSessionIssuanceService;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -432,5 +433,40 @@ class RefreshSessionStoreTest {
             allowRevoke.countDown();
             executor.shutdownNow();
         }
+    }
+
+    @Test
+    void initialIssuancePersistsOnlyFingerprintForAnEnabledAccount() {
+        UUID userId = UUID.randomUUID();
+        jdbc.update("INSERT INTO users (id, enabled) VALUES (?, TRUE)", userId);
+
+        var issuer = new RefreshSessionIssuanceService(store, 600L);
+        var issued = issuer.issue(userId).orElseThrow();
+
+        String storedFingerprint = jdbc.queryForObject(
+                "SELECT token_fingerprint FROM refresh_sessions WHERE id = ?",
+                String.class, issued.sessionId());
+        assertNotNull(storedFingerprint);
+        assertNotEquals(issued.token(), storedFingerprint);
+        assertTrue(RefreshTokenMaterial.matches(issued.token(), storedFingerprint));
+        assertTrue(issued.expiresAt().isAfter(Instant.now()));
+        assertTrue(issued.expiresAt().isBefore(Instant.now().plusSeconds(605)));
+        assertTrue(rotations.rotate(issued.token()).isPresent(),
+                "initially issued session should be eligible for internal rotation");
+    }
+
+    @Test
+    void initialIssuanceDeniesDisabledAndDeletedAccounts() {
+        UUID disabledId = UUID.randomUUID();
+        UUID missingId = UUID.randomUUID();
+        jdbc.update("INSERT INTO users (id, enabled) VALUES (?, FALSE)", disabledId);
+
+        var issuer = new RefreshSessionIssuanceService(store, 600L);
+        assertTrue(issuer.issue(disabledId).isEmpty());
+        assertTrue(issuer.issue(missingId).isEmpty());
+
+        assertEquals(0, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM refresh_sessions WHERE user_id IN (?, ?)",
+                Integer.class, disabledId, missingId));
     }
 }

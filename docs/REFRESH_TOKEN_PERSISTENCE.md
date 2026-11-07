@@ -144,3 +144,14 @@ A camada interna `RefreshSessionRotationService` adquire, **dentro de uma transa
 O lock é **compartilhado entre instâncias** que usam o mesmo PostgreSQL, não um `synchronized` limitado ao processo Java. Um hash de 64 bits pode causar colisões, que apenas serializam famílias independentes adicionalmente. Há testes com Testcontainers para ambas as ordens: rotação iniciada antes da revogação e revogação iniciada antes da rotação. Eles verificam que não sobra sucessor utilizável no primeiro caso e que nenhum sucessor é emitido após revogação no segundo.
 
 **Escopo exato da garantia:** a serialização vale para os métodos da camada de serviço que respeitam esse protocolo e para instâncias conectadas ao mesmo banco. Métodos de repositório chamados diretamente, escritas de outros processos que ignorem o lock ou alterações de esquema fora desse fluxo não compartilham a garantia. Nenhuma revogação imediata de access JWT foi adicionada. A operação ainda não foi integrada ao login, frontend, refresh HTTP ou logout HTTP.
+
+
+## Emissão inicial interna de refresh session
+
+O serviço `RefreshSessionIssuanceService` cria uma primeira sessão para um `user_id` existente e habilitado. A validade absoluta é configurável em `jwt.refresh-session-lifetime-seconds` (padrão demonstrativo de 604800 segundos, ou sete dias). Essa duração **não altera** a validade atual de 24 horas dos access JWTs.
+
+O token opaco é gerado com `SecureRandom`; apenas seu fingerprint SHA-256 entra na tabela `refresh_sessions`. Uma instrução `INSERT ... SELECT` verifica `users.enabled = TRUE` e bloqueia a linha do usuário com `FOR SHARE` durante a inserção. Uma conta inexistente ou desabilitada não recebe sessão. O resultado interno protege o valor do token contra sua inclusão acidental no `toString()`.
+
+Os testes `RefreshSessionStoreTest` em PostgreSQL cobrem emissão para usuário habilitado, ausência de token para contas desabilitadas/inexistentes e rotação subsequente. `RefreshSessionIssuanceServiceTest` cobre tratamento de duração inválida e representação textual sem o segredo.
+
+**Limitação decisiva:** essa emissão ainda **não é chamada pelo login**. Não foram criados endpoints de refresh/logout, cookies, configuração de CSRF nem renovação pelo frontend. O prazo de sete dias descreve apenas a configuração do serviço interno, não uma sessão web ativa. Antes da integração HTTP, é necessário definir o contrato e testes de falhas de rede, concorrência entre abas, proteção CSRF e lançamento compatível.

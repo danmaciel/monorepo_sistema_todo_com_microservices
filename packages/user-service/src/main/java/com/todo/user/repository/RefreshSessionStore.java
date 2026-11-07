@@ -40,6 +40,27 @@ public class RefreshSessionStore {
     }
 
     /**
+     * Creates an initial refresh session only while the owning account exists
+     * and is enabled. PostgreSQL locks that user row until this statement ends,
+     * preventing a concurrent disabling update from passing through unchecked.
+     *
+     * No raw token is accepted or persisted by this operation.
+     */
+    public boolean createForEnabledUser(RefreshSession session) {
+        Objects.requireNonNull(session, "session");
+        if (session.revokedAt() != null) {
+            throw new IllegalArgumentException("New sessions cannot start revoked");
+        }
+        int inserted = jdbc.update(
+                "INSERT INTO refresh_sessions (id, user_id, family_id, token_fingerprint, expires_at) " +
+                        "SELECT ?, u.id, ?, ?, ? FROM users u " +
+                        "WHERE u.id = ? AND u.enabled = TRUE FOR SHARE",
+                session.id(), session.familyId(), session.tokenFingerprint(),
+                Timestamp.from(session.expiresAt()), session.userId());
+        return inserted == 1;
+    }
+
+    /**
      * Serializes operations on all tokens of one refresh family across instances.
      * Must be called inside the caller's transaction before claim/rotation or
      * family revocation; the PostgreSQL advisory lock lasts until commit/rollback.
