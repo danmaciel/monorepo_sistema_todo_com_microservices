@@ -33,3 +33,7 @@ jobs:
       - run: npm ci
       - run: npm run test:session --workspace=web-app
       - run: npm run build
+      - name: Build opt-in browser session frontend
+        env:
+          VITE_SESSION_AUTH: "true"
+        run: npm run build
