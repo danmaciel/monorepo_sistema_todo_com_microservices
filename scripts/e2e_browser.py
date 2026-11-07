@@ -37,7 +37,7 @@ def register_test_account():
 
 def assert_browser_cookie(context):
     cookies = [
-        cookie for cookie in context.cookies(FRONTEND)
+        cookie for cookie in context.cookies(FRONTEND + "/api/users/refresh")
         if cookie["name"] == "__Secure-todo-refresh"
     ]
     assert len(cookies) == 1, "Expected one refresh cookie"
@@ -114,7 +114,7 @@ def main():
             expect(page.get_by_role("button", name="Entrar")).to_be_visible()
             assert not any(
                 cookie["name"] == "__Secure-todo-refresh"
-                for cookie in context.cookies(FRONTEND)
+                for cookie in context.cookies(FRONTEND + "/api/users/refresh")
             ), "Refresh cookie remains after logout"
 
             page.reload(wait_until="domcontentloaded")
