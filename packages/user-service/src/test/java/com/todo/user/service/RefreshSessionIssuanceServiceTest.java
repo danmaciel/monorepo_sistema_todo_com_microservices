@@ -3,6 +3,7 @@ package com.todo.user.service;
 import com.todo.user.repository.RefreshSessionStore;
 import com.todo.user.security.RefreshSession;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -12,6 +13,18 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 class RefreshSessionIssuanceServiceTest {
+
+    @Test
+    void springContextCanConstructIssuerWithConfiguredLifetime() {
+        new ApplicationContextRunner()
+                .withBean(RefreshSessionStore.class, () -> mock(RefreshSessionStore.class))
+                .withUserConfiguration(RefreshSessionIssuanceService.class)
+                .withPropertyValues("jwt.refresh-session-lifetime-seconds=600")
+                .run(context -> {
+                    assertNull(context.getStartupFailure());
+                    assertNotNull(context.getBean(RefreshSessionIssuanceService.class));
+                });
+    }
 
     @Test
     void issuanceResultRedactsRawTokenInTextualRepresentation() {
