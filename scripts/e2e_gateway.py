@@ -111,6 +111,16 @@ def main():
     status, _ = call("GET", "/api/users/" + user_ids[0], token=users[1])
     expect(403, status, "deny reading another user's email/profile")
 
+    status, own_exists = call("GET", "/api/users/exists/" + user_ids[0], token=users[0])
+    expect(200, status, "check own account existence")
+    assert own_exists is True
+
+    status, _ = call("GET", "/api/users/exists/" + user_ids[0], token=users[1])
+    expect(403, status, "deny cross-user account existence query")
+
+    status, _ = call("GET", "/api/users/exists/" + user_ids[0])
+    assert status in (401, 403), f"anonymous account lookup must be denied, got HTTP {status}"
+
     status, _ = call("GET", "/api/users/" + user_ids[0])
     assert status in (401, 403), f"anonymous profile access must be denied, got HTTP {status}"
 
