@@ -2,21 +2,48 @@ import axios from 'axios'
 import { useAuthStore } from '../store/authStore'
 import { isJwtActive } from '../utils/session'
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080'
+export const sessionMode = import.meta.env.VITE_SESSION_AUTH === 'true'
+// Browser session mode always uses the frontend's same-origin /api proxy.
+// This deliberately does not enable credentialed cross-origin CORS.
+const API_URL = sessionMode ? '' : (import.meta.env.VITE_API_URL || 'http://localhost:8080')
 
 const api = axios.create({
   baseURL: API_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  headers: { 'Content-Type': 'application/json' },
 })
 
+// This client deliberately has no bearer interceptors and never serializes
+// the HttpOnly refresh cookie; the browser manages it.
+const sessionHttp = axios.create({
+  baseURL: '',
+  withCredentials: true,
+  headers: { 'Content-Type': 'application/json' },
+})
+
+export const sessionService = {
+  login: (data) => sessionHttp.post('/api/users/session/login', data),
+  bootstrap: () => sessionHttp.post('/api/users/session/csrf'),
+  refresh: (csrf) => sessionHttp.post('/api/users/refresh', null, {
+    headers: { 'X-CSRF-Token': csrf },
+  }),
+  logout: (csrf) => sessionHttp.post('/api/users/logout', null, {
+    headers: { 'X-CSRF-Token': csrf },
+  }),
+}
+
 api.interceptors.request.use(
-  (config) => {
+  async (config) => {
+    if (sessionMode) {
+      let token = useAuthStore.getState().token
+      if (!isJwtActive(token)) {
+        token = await useAuthStore.getState().refreshSession()
+      }
+      if (token) config.headers.Authorization = `Bearer ${token}`
+      return config
+    }
     const token = useAuthStore.getState().token
     if (token && !isJwtActive(token)) {
       useAuthStore.getState().logout()
-      // Let the backend reject requests without credentials (401/403).
     } else if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
@@ -27,10 +54,23 @@ api.interceptors.request.use(
 
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    const original = error.config
+    if (sessionMode && error.response?.status === 401 && original && !original._sessionRetried) {
+      original._sessionRetried = true
+      const token = await useAuthStore.getState().refreshSession()
+      if (token) {
+        original.headers.Authorization = `Bearer ${token}`
+        return api(original)
+      }
+    }
     if (error.response?.status === 401) {
-      useAuthStore.getState().logout()
-      window.location.href = '/login'
+      if (sessionMode) {
+        useAuthStore.getState().clearSession()
+      } else {
+        useAuthStore.getState().logout()
+        window.location.href = '/login'
+      }
     }
     return Promise.reject(error)
   }
