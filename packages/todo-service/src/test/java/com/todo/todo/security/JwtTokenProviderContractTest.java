@@ -3,6 +3,7 @@ package com.todo.todo.security;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
@@ -103,5 +104,56 @@ class JwtTokenProviderContractTest {
 
         assertTrue(provider.validateToken(token));
         assertEquals(userId, provider.getUserIdFromToken(token));
+    }
+
+    @Test
+    void rejectsTokenWithUnexpectedIssuerEvenWhenSignedCorrectly() {
+        String token = Jwts.builder()
+                .subject(UUID.randomUUID().toString())
+                .issuer("another-service")
+                .audience().add("todo-api").and()
+                .expiration(new Date(System.currentTimeMillis() + 60_000L))
+                .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8)))
+                .compact();
+
+        assertFalse(provider.validateToken(token));
+    }
+
+    @Test
+    void rejectsTokenWithUnexpectedAudienceEvenWhenSignedCorrectly() {
+        String token = Jwts.builder()
+                .subject(UUID.randomUUID().toString())
+                .issuer("todo-user-service")
+                .audience().add("another-api").and()
+                .expiration(new Date(System.currentTimeMillis() + 60_000L))
+                .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8)))
+                .compact();
+
+        assertFalse(provider.validateToken(token));
+    }
+
+    @Test
+    void rejectsPartialIssuerAudienceContract() {
+        String token = Jwts.builder()
+                .subject(UUID.randomUUID().toString())
+                .issuer("todo-user-service")
+                .expiration(new Date(System.currentTimeMillis() + 60_000L))
+                .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8)))
+                .compact();
+
+        assertFalse(provider.validateToken(token));
+    }
+
+    @Test
+    void strictModeRejectsLegacyTokenMissingIssuerAndAudience() {
+        String legacy = Jwts.builder()
+                .subject(UUID.randomUUID().toString())
+                .expiration(new Date(System.currentTimeMillis() + 60_000L))
+                .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8)))
+                .compact();
+
+        assertTrue(provider.validateToken(legacy));
+        ReflectionTestUtils.setField(provider, "acceptLegacyWithoutClaims", false);
+        assertFalse(provider.validateToken(legacy));
     }
 }
