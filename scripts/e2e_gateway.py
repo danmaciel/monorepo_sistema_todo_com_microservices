@@ -29,6 +29,40 @@ def call(method, path, data=None, token=None):
         return error.code, None
 
 
+def check_gateway_cors():
+    """Check allowed and disallowed browser preflight requests at the Gateway."""
+    for origin, allowed in (
+        ("http://localhost:5173", True),
+        ("http://localhost:3000", True),
+        ("https://untrusted.example.invalid", False),
+    ):
+        request = urllib.request.Request(
+            BASE + "/api/users/login",
+            method="OPTIONS",
+            headers={
+                "Origin": origin,
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=15) as response:
+                status, headers = response.status, response.headers
+        except urllib.error.HTTPError as error:
+            status, headers = error.code, error.headers
+            error.read()
+
+        exposed_origin = headers.get("Access-Control-Allow-Origin")
+        if allowed:
+            assert 200 <= status < 300, f"allowed preflight rejected: HTTP {status}"
+            assert exposed_origin == origin, "Gateway must echo the explicitly allowed origin"
+            assert headers.get("Access-Control-Allow-Credentials") != "true", (
+                "credentialed browser requests must remain disabled until CSRF design is complete"
+            )
+        else:
+            assert exposed_origin != origin, "Gateway reflected a disallowed origin"
+
+
 def signed_test_token(user_id, *, expired=False, issuer=None, audience=None):
     """Sign a JWT with disposable CI credentials; never print it."""
     secret = os.environ.get("JWT_SECRET", "")
@@ -75,6 +109,8 @@ def main():
         time.sleep(3)
     else:
         raise AssertionError("Gateway/Todo Service did not become available")
+
+    check_gateway_cors()
 
     suffix = uuid.uuid4().hex[:10]
     password = "Ci-Test-" + uuid.uuid4().hex
