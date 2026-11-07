@@ -70,3 +70,11 @@ Mesmo após logout HTTP, access JWTs já emitidos continuarão válidos até a e
 - Revisão de topologia HTTPS, proxy, SameSite e domínio na implantação alvo.
 
 **Escopo desta PR:** documentação de contrato + classe de serialização isolada e testes unitários. Não existe endpoint HTTP de refresh/logout nem cookie emitido na execução atual.
+
+## Etapa isolada: política de Origin para endpoints futuros
+
+A classe `RefreshRequestOriginPolicy` implementa a verificação exata e *fail-closed* do cabeçalho `Origin`: exige exatamente um valor, igual à origem explicitamente configurada com esquema, host e porta. Não aceita ausência de cabeçalho, valor literal `null`, origens similares, valores múltiplos ou fallback por `Referer`/`X-Forwarded-Host`. A lista de origens permitidas rejeita URLs com caminhos, query, fragmento, credenciais ou entradas duplicadas.
+
+**A classe ainda não está ligada ao Spring Security nem a controllers**: é uma política testada isoladamente, não uma defesa ativa de um endpoint existente. A lista de origens em produção deverá vir de configuração explícita, compatível com a topologia HTTPS aprovada, e a instalação da política deverá ocorrer junto do endpoint e dos testes E2E.
+
+**Origin não é autenticação e não substitui token CSRF.** Clientes HTTP não-browser podem falsificar esse cabeçalho; por isso o fluxo futuro deve combinar cookie/refresh token, verificação de Origin e o mecanismo CSRF definido para a sessão. A configuração CORS continua sem credenciais.
