@@ -130,4 +130,17 @@ O repositório implementa `revokeFamilyByPresentedToken`, que recebe um refresh 
 
 Os testes com PostgreSQL verificam que a operação bloqueia a rotação de um sucessor já criado, é repetível sem efeitos adicionais e não altera famílias independentes.
 
-**Esta operação interna ainda não constitui logout.** Não existe endpoint HTTP, vinculação a um login de navegador, limpeza de cookie, proteção CSRF ou revogação de access JWT. Além disso, **não está demonstrada a segurança contra uma rotação concorrente de outro token da mesma família**: uma atualização que seleciona os registros existentes pode concorrer com a inserção de sucessores. Antes de expor a operação para clientes, será preciso coordenar rotação e revogação no nível da família e testar essa disputa com PostgreSQL real.
+**Esta operação interna ainda não constitui logout.** Não existe endpoint HTTP, vinculação a um login de navegador, limpeza de cookie, proteção CSRF ou revogação de access JWT. O acesso pela camada de serviço (`RefreshSessionRotationService.revokeFamily`) agora coordena a revogação com a rotação por bloqueio transacional de família; chamadas diretas ao método de repositório fora desse protocolo **não possuem essa garantia**. Antes de expor a operação para clientes, ainda será necessário revisar o contrato HTTP, as perdas de resposta após COMMIT, a concorrência entre abas e as políticas de revogação.
+
+## Serialização de operações da mesma família
+
+A camada interna `RefreshSessionRotationService` adquire, **dentro de uma transação PostgreSQL**, um advisory lock transacional calculado a partir do `family_id` obtido por fingerprint do token apresentado. Rotação, rejeição por replay com revogação e revogação explícita de família devem seguir o mesmo protocolo:
+
+1. Iniciar transação.
+2. Resolver a família do token apresentado e adquirir o lock transacional `pg_advisory_xact_lock`.
+3. Reavaliar o estado do token no banco e consumir/inserir sucessor ou revogar a família.
+4. Confirmar ou desfazer a transação, liberando o bloqueio.
+
+O lock é **compartilhado entre instâncias** que usam o mesmo PostgreSQL, não um `synchronized` limitado ao processo Java. Um hash de 64 bits pode causar colisões, que apenas serializam famílias independentes adicionalmente. Há testes com Testcontainers para ambas as ordens: rotação iniciada antes da revogação e revogação iniciada antes da rotação. Eles verificam que não sobra sucessor utilizável no primeiro caso e que nenhum sucessor é emitido após revogação no segundo.
+
+**Escopo exato da garantia:** a serialização vale para os métodos da camada de serviço que respeitam esse protocolo e para instâncias conectadas ao mesmo banco. Métodos de repositório chamados diretamente, escritas de outros processos que ignorem o lock ou alterações de esquema fora desse fluxo não compartilham a garantia. Nenhuma revogação imediata de access JWT foi adicionada. A operação ainda não foi integrada ao login, frontend, refresh HTTP ou logout HTTP.

@@ -32,26 +32,49 @@ public class RefreshSessionRotationService {
             return Optional.empty();
         }
 
-        Optional<RotationResult> rotated = transactions.execute(status -> store.claimForRotation(presentedToken).map(parent -> {
-            String nextToken = RefreshTokenMaterial.generate();
-            UUID nextSessionId = UUID.randomUUID();
-            store.create(new RefreshSession(
-                    nextSessionId,
-                    parent.userId(),
-                    parent.familyId(),
-                    RefreshTokenMaterial.fingerprint(nextToken),
-                    parent.expiresAt(),
-                    null));
-            return new RotationResult(nextSessionId, nextToken);
-        }));
+        return transactions.execute(status -> {
+            if (!store.lockFamilyForPresentedToken(presentedToken)) {
+                return Optional.empty();
+            }
 
-        // Run replay handling after the rotation transaction completes. A
-        // concurrent successful claimant must commit its successor before we
-        // revoke the family; never revoke in a transaction that is rolled back.
-        if (rotated.isEmpty()) {
-            store.revokeFamilyOnReplay(presentedToken);
+            Optional<RotationResult> rotated = store.claimForRotation(presentedToken).map(parent -> {
+                String nextToken = RefreshTokenMaterial.generate();
+                UUID nextSessionId = UUID.randomUUID();
+                store.create(new RefreshSession(
+                        nextSessionId,
+                        parent.userId(),
+                        parent.familyId(),
+                        RefreshTokenMaterial.fingerprint(nextToken),
+                        parent.expiresAt(),
+                        null));
+                return new RotationResult(nextSessionId, nextToken);
+            });
+
+            // The same family lock protects both successor insertion and replay
+            // revocation. A concurrent claimant cannot insert after revocation.
+            if (rotated.isEmpty()) {
+                store.revokeFamilyOnReplay(presentedToken);
+            }
+            return rotated;
+        });
+    }
+
+    /**
+     * Internal family revocation for a future logout flow.
+     * Serializes against rotation in the same PostgreSQL transaction.
+     * Does not revoke issued access JWTs or expose an HTTP endpoint.
+     */
+    public int revokeFamily(String presentedToken) {
+        if (presentedToken == null || presentedToken.isBlank()) {
+            return 0;
         }
-        return rotated;
+        Integer revoked = transactions.execute(status -> {
+            if (!store.lockFamilyForPresentedToken(presentedToken)) {
+                return 0;
+            }
+            return store.revokeFamilyByPresentedToken(presentedToken);
+        });
+        return revoked == null ? 0 : revoked;
     }
 
     /**

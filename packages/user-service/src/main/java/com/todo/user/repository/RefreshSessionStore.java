@@ -40,6 +40,25 @@ public class RefreshSessionStore {
     }
 
     /**
+     * Serializes operations on all tokens of one refresh family across instances.
+     * Must be called inside the caller's transaction before claim/rotation or
+     * family revocation; the PostgreSQL advisory lock lasts until commit/rollback.
+     *
+     * Hash collisions can serialize unrelated families but cannot remove
+     * synchronization from matching family IDs.
+     */
+    public boolean lockFamilyForPresentedToken(String rawToken) {
+        if (rawToken == null || rawToken.isBlank()) {
+            return false;
+        }
+        String fingerprint = com.todo.user.security.RefreshTokenMaterial.fingerprint(rawToken);
+        return !jdbc.query(
+                "SELECT pg_advisory_xact_lock(hashtextextended(family_id::text, 0)) " +
+                        "FROM refresh_sessions WHERE token_fingerprint = ?",
+                (rs, rowNum) -> Boolean.TRUE, fingerprint).isEmpty();
+    }
+
+    /**
      * Claims a valid parent token and returns its trusted database identity.
      * Must be called inside the same transaction as insertion of its successor.
      * No row is returned for missing, consumed, revoked or expired tokens, or
@@ -101,8 +120,8 @@ public class RefreshSessionStore {
      * A token from another family cannot select the target family. The return
      * value is the number of rows newly marked as revoked.
      *
-     * Concurrent rotation versus revocation needs its own coordination
-     * strategy before this method is exposed as a logout contract.
+     * The caller must hold the family advisory lock in the same transaction,
+     * or concurrent rotation could insert a successor after this UPDATE.
      */
     public int revokeFamilyByPresentedToken(String rawToken) {
         if (rawToken == null || rawToken.isBlank()) {
