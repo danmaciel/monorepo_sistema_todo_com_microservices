@@ -35,8 +35,8 @@ A remoção usa o mesmo nome, caminho, atributos e `Max-Age=0`. A classe não re
 
 | Rota pública | Método | Entrada | Saída esperada |
 | --- | --- | --- | --- |
-| `/api/users/login` | POST | username e password | Access JWT + usuário; no rollout final emite cookie HttpOnly |
-| `/api/users/refresh` | POST | cookie refresh + proteção CSRF | Novo access JWT e cookie rotacionado; erro não informa se a sessão existe |
+| `/api/users/login` | POST | username e password | Contrato legado inalterado: access JWT e usuário, sem cookie de refresh |\n| `/api/users/session/login` | POST | username, password e Origin autorizado | Login opt-in: access JWT + usuário + Set-Cookie de refresh + X-CSRF-Token |
+| `/api/users/refresh` | POST | cookie refresh + Origin e proteção CSRF | Handler opt-in: novo access JWT e cookie/CSRF rotacionados; falha 401 limpa o cookie |
 | `/api/users/logout` | POST | cookie refresh + Origin + CSRF | Handler implementado, mas inacessível por padrão; com a fronteira explicitamente habilitada, revoga a família e retorna 204 com cookie expirado |
 | `/api/users/me` | GET | Bearer JWT | Perfil do próprio usuário |
 
@@ -116,3 +116,15 @@ Quando o filtro for habilitado de maneira explícita **num ambiente de integraç
 **Não é um logout web operacional:** o login ainda não emite refresh cookies, não há entrega de CSRF, CORS com credenciais segue desabilitado, e testes de navegador HTTPS não foram feitos. Habilitar o filtro fora de um ambiente controlado não é recomendado até que todo o fluxo esteja implementado. A revogação remove a capacidade de renovar a família, **não invalida os access JWTs de 24 horas já emitidos**, em especial no Todo Service. A recuperação de resposta perdida e a coordenação entre abas também seguem pendentes.
 
 O endpoint de refresh continua sem handler.
+
+## Implementação HTTP opt-in para demonstração
+
+Os handlers `RefreshSessionController` adicionaram `POST /users/session/login` e `POST /users/refresh` (respectivamente `/api/users/session/login` e `/api/users/refresh` no Gateway). Ambos continuam **bloqueados por padrão** pelo filtro, que exige `auth.refresh.http-enabled=true` e configurações explícitas de `Origin` e chave CSRF. O login de sessão exige apenas credenciais e Origin confiável: após validar a senha pelo serviço existente, cria no PostgreSQL uma família de refresh, responde com o access JWT no JSON e entrega o refresh token exclusivamente por cookie `HttpOnly; Secure; SameSite=Strict`. O CSRF vinculado à sessão aparece no cabeçalho de resposta `X-CSRF-Token`, nunca o refresh secret. O login/cadastro legado continua sem mudanças.
+
+O refresh HTTP exige cookie + Origin + CSRF válido, e executa a rotação transacional no PostgreSQL. Um sucessor elegível gera outro access JWT, cookie rotacionado e CSRF novo. O identificador de usuário e o vencimento absoluto usados na resposta vêm do resultado confiável do SQL de rotação; após a transação, há uma consulta de confirmação do estado do usuário. Token ausente/consumido/revogado/expirado responde HTTP 401 e limpa o cookie. Replay de token consumido pode revogar toda a família, conforme a política interna já documentada.
+
+O Docker Compose mantém o padrão **`AUTH_REFRESH_HTTP_ENABLED=false`**, sem chave CSRF real. O workflow E2E cria material efêmero, ativa o fluxo somente nos contêineres descartáveis e testa pelo Gateway: login de sessão, rotação real, JWT emitido, CSRF/Origin inválidos, logout e revogação por replay. O teste HTTP utiliza cliente Python, **não um navegador real**.
+
+**Ainda não é autenticação web pronta:** Gateway e User Service continuam com `allowCredentials=false`, sem suporte de navegador para leitura da resposta credenciada, sem bootstrap CSRF no reload, nem garantia de recuperação após perda de resposta. O frontend continua usando localStorage e access JWT de 24 horas. Não habilitar a opção no navegador ou produção antes de completar CORS, HTTPS, proteção das credenciais, fluxo de múltiplas abas e testes browser end-to-end.
+
+Para reproduzir o fluxo por cliente HTTP local é necessário prover, sem versionar segredos, `AUTH_REFRESH_HTTP_ENABLED=true`, `AUTH_REFRESH_ALLOWED_ORIGINS=http://localhost:3000` e uma chave independente base64 de pelo menos 32 bytes via `AUTH_REFRESH_CSRF_KEY_BASE64`. O cookie `Secure` exige HTTPS para teste representativo em navegador; scripts HTTP não demonstram aceitação desse cookie por navegadores.
