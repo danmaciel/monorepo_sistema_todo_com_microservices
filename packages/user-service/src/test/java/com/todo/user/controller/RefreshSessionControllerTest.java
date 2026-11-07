@@ -5,6 +5,7 @@ import com.todo.user.dto.LoginRequest;
 import com.todo.user.dto.UserResponse;
 import com.todo.user.entity.User;
 import com.todo.user.repository.UserRepository;
+import com.todo.user.repository.RefreshSessionStore;
 import com.todo.user.security.JwtTokenProvider;
 import com.todo.user.security.RefreshCookiePolicy;
 import com.todo.user.security.RefreshCsrfTokenPolicy;
@@ -41,14 +42,50 @@ class RefreshSessionControllerTest {
     private final JwtTokenProvider jwt = mock(JwtTokenProvider.class);
     private final RefreshSessionIssuanceService issuance = mock(RefreshSessionIssuanceService.class);
     private final RefreshSessionRotationService rotations = mock(RefreshSessionRotationService.class);
+    private final RefreshSessionStore refreshSessions = mock(RefreshSessionStore.class);
 
     private MockMvc mvc(boolean enabled) {
         var boundary = new RefreshHttpBoundaryFilter(
                 enabled, enabled ? ORIGIN : "", enabled ? KEY_B64 : "");
         return MockMvcBuilders.standaloneSetup(
                         new RefreshSessionController(users, userRepository, jwt,
-                                issuance, rotations, boundary))
+                                issuance, rotations, refreshSessions, boundary))
                 .addFilters(boundary).build();
+    }
+
+    @Test
+    void csrfBootstrapRecoversOnlyActiveSessionProof() throws Exception {
+        String token = RefreshTokenMaterial.generate();
+        when(refreshSessions.isActive(token)).thenReturn(true);
+        mvc(true).perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .get("/users/session/csrf").servletPath("/users/session/csrf")
+                        .header("Origin", ORIGIN)
+                        .cookie(new Cookie(RefreshCookiePolicy.COOKIE_NAME, token)))
+                .andExpect(status().isNoContent())
+                .andExpect(header().string("Cache-Control", containsString("no-store")))
+                .andExpect(header().string(RefreshCsrfTokenPolicy.HEADER_NAME,
+                        new RefreshCsrfTokenPolicy(KEY).issue(token)))
+                .andExpect(content().string(""));
+        verify(refreshSessions).isActive(token);
+        verifyNoInteractions(rotations, jwt);
+    }
+
+    @Test
+    void csrfBootstrapRejectsMissingOriginOrRevokedCookie() throws Exception {
+        String token = RefreshTokenMaterial.generate();
+        mvc(true).perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .get("/users/session/csrf").servletPath("/users/session/csrf")
+                        .cookie(new Cookie(RefreshCookiePolicy.COOKIE_NAME, token)))
+                .andExpect(status().isForbidden());
+        verifyNoInteractions(refreshSessions);
+        when(refreshSessions.isActive(token)).thenReturn(false);
+        mvc(true).perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .get("/users/session/csrf").servletPath("/users/session/csrf")
+                        .header("Origin", ORIGIN)
+                        .cookie(new Cookie(RefreshCookiePolicy.COOKIE_NAME, token)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(header().string("Set-Cookie", containsString("Max-Age=0")));
+        verify(refreshSessions).isActive(token);
     }
 
     @Test
