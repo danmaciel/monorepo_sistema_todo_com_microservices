@@ -16,7 +16,8 @@ import java.util.Objects;
  * Consuming a token is a single conditional UPDATE. Concurrent consumers of
  * the same token cannot both succeed, even across application instances.
  * The internal rotation service composes claim and successor insertion in one transaction.
- * HTTP refresh/login integration and revocation policy are not implemented yet.
+ * Internal replay detection revokes a consumed token's family. HTTP refresh/login
+ * integration and access-JWT revocation are not implemented.
  */
 @Repository
 public class RefreshSessionStore {
