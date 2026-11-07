@@ -62,6 +62,39 @@ class RefreshSessionStoreTest {
     }
 
     @Test
+    void csrfBootstrapEligibilityRequiresUnconsumedActiveEnabledSession() {
+        String token = createActiveToken();
+        String fingerprint = RefreshTokenMaterial.fingerprint(token);
+        assertTrue(store.isActive(token));
+        assertFalse(store.isActive(null));
+        assertFalse(store.isActive(RefreshTokenMaterial.generate()));
+
+        // A successfully rotated parent must never bootstrap another CSRF token.
+        var successor = rotations.rotate(token).orElseThrow();
+        assertFalse(store.isActive(token));
+        assertTrue(store.isActive(successor.token()));
+
+        UUID owner = jdbc.queryForObject(
+                "SELECT user_id FROM refresh_sessions WHERE token_fingerprint = ?",
+                UUID.class, fingerprint);
+        jdbc.update("UPDATE users SET enabled = FALSE WHERE id = ?", owner);
+        assertFalse(store.isActive(successor.token()),
+                "disabled account must not recover CSRF for an existing cookie");
+    }
+
+    @Test
+    void csrfBootstrapEligibilityRejectsExpiredAndRevokedTokens() {
+        String expired = createActiveToken();
+        String revoked = createActiveToken();
+        jdbc.update("UPDATE refresh_sessions SET expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second' " +
+                "WHERE token_fingerprint = ?", RefreshTokenMaterial.fingerprint(expired));
+        jdbc.update("UPDATE refresh_sessions SET revoked_at = CURRENT_TIMESTAMP " +
+                "WHERE token_fingerprint = ?", RefreshTokenMaterial.fingerprint(revoked));
+        assertFalse(store.isActive(expired));
+        assertFalse(store.isActive(revoked));
+    }
+
+    @Test
     void persistsOnlyFingerprintAndTokenIsConsumedOnce() {
         String token = createActiveToken();
         String fingerprint = RefreshTokenMaterial.fingerprint(token);
