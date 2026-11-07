@@ -13,8 +13,9 @@ import java.util.UUID;
 /**
  * Rotates an existing opaque refresh token in one database transaction.
  *
- * This is a domain service, not an authentication endpoint. Token issuance,
- * browser transport, account checks and replay response policy remain separate.
+ * This is an internal service, not an authentication endpoint. The PostgreSQL
+ * store checks account eligibility and revokes the family on reuse of a consumed
+ * token. Initial issuance, browser transport, HTTP refresh and logout remain separate.
  */
 @Service
 public class RefreshSessionRotationService {
