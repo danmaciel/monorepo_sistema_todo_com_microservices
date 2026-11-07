@@ -19,7 +19,7 @@ jobs:
         run: |
           echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
           echo "JWT_SECRET=$(openssl rand -hex 48)" >> "$GITHUB_ENV"
-          echo "AUTH_REFRESH_CSRF_KEY_BASE64=$(openssl rand -base64 48 | tr -d '\\n')" >> "$GITHUB_ENV"
+          echo "AUTH_REFRESH_CSRF_KEY_BASE64=$(openssl rand -base64 48)" >> "$GITHUB_ENV"
       - name: Build and start backend services
         env:
           JWT_ACCEPT_LEGACY_WITHOUT_CLAIMS: 'false'
