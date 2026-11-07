@@ -37,7 +37,7 @@ A remoção usa o mesmo nome, caminho, atributos e `Max-Age=0`. A classe não re
 | --- | --- | --- | --- |
 | `/api/users/login` | POST | username e password | Access JWT + usuário; no rollout final emite cookie HttpOnly |
 | `/api/users/refresh` | POST | cookie refresh + proteção CSRF | Novo access JWT e cookie rotacionado; erro não informa se a sessão existe |
-| `/api/users/logout` | POST | cookie refresh + proteção CSRF | Resposta sem corpo e cookie expirado; revoga família conhecida |
+| `/api/users/logout` | POST | cookie refresh + Origin + CSRF | Handler implementado, mas inacessível por padrão; com a fronteira explicitamente habilitada, revoga a família e retorna 204 com cookie expirado |
 | `/api/users/me` | GET | Bearer JWT | Perfil do próprio usuário |
 
 O cadastro exige uma decisão explícita: também criar refresh session após registro ou solicitar login. O contrato atual não muda nesta etapa.
@@ -106,3 +106,13 @@ Se for habilitado explicitamente em um ambiente de teste futuro, a inicializaç�
 **Isso ainda não implementa refresh ou logout:** mesmo com a fronteira habilitada não há controller para renovar tokens ou revogar sessões. Não habilitar `auth.refresh.http-enabled` em uma implantação real até que os handlers, o transporte HTTPS, a política de origin/CSRF, a emissão/delivery de tokens, CORS com credenciais, observabilidade e E2E do navegador sejam implementados conjuntamente. A configuração não altera `http.csrf` global, validade dos JWTs ou `allowCredentials=false`.
 
 Os testes unitários simulam pedidos HTTP aceitos/rejeitados pela fronteira; o E2E padrão continua verificando os fluxos legados, sem habilitar cookies. Isso não comprova comportamento real de sessões por cookie nem substitui revisão de autenticação.
+
+## Handler HTTP de logout (protegido e desativado por padrão)
+
+O `RefreshLogoutController` implementa `POST /users/logout` no User Service, roteado pelo Gateway como `POST /api/users/logout`. A configuração de Spring Security permite essa rota sem access JWT **porque sua credencial pretendida é o cookie refresh**, que deve passar por `RefreshHttpBoundaryFilter`. O filtro permanece registrado e com `auth.refresh.http-enabled=false` por padrão: nessa condição, a requisição é bloqueada, e a implementação de revogação não é chamada.
+
+Quando o filtro for habilitado de maneira explícita **num ambiente de integração controlado**, exige origem autorizada, um cookie refresh e o token CSRF HMAC correspondente. Após a validação, o controller chama `RefreshSessionRotationService.revokeFamily` para revogar a família de refresh sessions no PostgreSQL. Tanto uma família conhecida quanto uma desconhecida produzem uma resposta sem corpo, HTTP 204, `Cache-Control: no-store` e `Set-Cookie` com o mesmo escopo e `Max-Age=0`. A existência de uma sessão não é divulgada pela resposta. Os testes HTTP com `MockMvc` cobrem o bloqueio padrão, a chamada de revogação após os controles, o cookie expirado e as negativas por falta de Origin/CSRF.
+
+**Não é um logout web operacional:** o login ainda não emite refresh cookies, não há entrega de CSRF, CORS com credenciais segue desabilitado, e testes de navegador HTTPS não foram feitos. Habilitar o filtro fora de um ambiente controlado não é recomendado até que todo o fluxo esteja implementado. A revogação remove a capacidade de renovar a família, **não invalida os access JWTs de 24 horas já emitidos**, em especial no Todo Service. A recuperação de resposta perdida e a coordenação entre abas também seguem pendentes.
+
+O endpoint de refresh continua sem handler.
