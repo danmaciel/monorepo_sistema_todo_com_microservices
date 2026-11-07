@@ -50,6 +50,10 @@ public class UserController {
 
     @GetMapping("/exists/{id}")
     public ResponseEntity<Boolean> existsById(@PathVariable UUID id) {
+        User requester = currentUser.getOrThrow();
+        if (!requester.getId().equals(id)) {
+            throw new UserProfileForbiddenException("Você só pode consultar seu próprio perfil");
+        }
         return ResponseEntity.ok(userService.existsById(id));
     }
 }
