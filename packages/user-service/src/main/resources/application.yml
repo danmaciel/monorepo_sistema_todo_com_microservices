@@ -34,6 +34,8 @@ spring:
 jwt:
   secret: ${JWT_SECRET}
   expiration: 86400000 # 24 horas em milissegundos
+  # Set false only after all previously issued 24h JWTs have expired.
+  accept-legacy-without-claims: ${JWT_ACCEPT_LEGACY_WITHOUT_CLAIMS:true}
 
 eureka:
   client:

@@ -29,8 +29,8 @@ def call(method, path, data=None, token=None):
         return error.code, None
 
 
-def expired_signed_token(user_id):
-    """Generate a deliberately expired, correctly signed HS256 JWT for E2E only."""
+def signed_test_token(user_id, *, expired=False, issuer=None, audience=None):
+    """Sign a JWT with disposable CI credentials; never print it."""
     secret = os.environ.get("JWT_SECRET", "")
     if len(secret.encode("utf-8")) < 32:
         raise AssertionError("E2E requires JWT_SECRET (at least 32 UTF-8 bytes)")
@@ -40,9 +40,19 @@ def expired_signed_token(user_id):
         return base64.urlsafe_b64encode(raw).rstrip(b"=")
 
     now = int(time.time())
+    claims = {
+        "sub": user_id,
+        "iat": now - 7200 if expired else now,
+        "exp": now - 3600 if expired else now + 3600,
+    }
+    if issuer is not None:
+        claims["iss"] = issuer
+    if audience is not None:
+        claims["aud"] = audience
+
     header = encoded_json({"alg": "HS256", "typ": "JWT"})
-    claims = encoded_json({"sub": user_id, "iat": now - 7200, "exp": now - 3600})
-    signing_input = header + b"." + claims
+    payload = encoded_json(claims)
+    signing_input = header + b"." + payload
     signature = hmac.new(secret.encode("utf-8"), signing_input, hashlib.sha256).digest()
     signature = base64.urlsafe_b64encode(signature).rstrip(b"=")
     return (signing_input + b"." + signature).decode("ascii")
@@ -105,12 +115,24 @@ def main():
     assert status in (401, 403), f"anonymous profile access must be denied, got HTTP {status}"
 
     # Both services must reject an authentically signed token whose exp is in the past.
-    expired_token = expired_signed_token(user_ids[0])
+    expired_token = signed_test_token(user_ids[0], expired=True)
     status, _ = call("GET", "/api/users/me", token=expired_token)
     assert status in (401, 403), f"user-service accepted expired signed JWT: HTTP {status}"
 
     status, _ = call("GET", "/api/todos", token=expired_token)
     assert status in (401, 403), f"todo-service accepted expired signed JWT: HTTP {status}"
+
+    # Correctly signed but wrong issuer/audience must be denied by both services.
+    for invalid_token in (
+        signed_test_token(user_ids[0], issuer="other-service", audience="todo-api"),
+        signed_test_token(user_ids[0], issuer="todo-user-service", audience="other-api"),
+        signed_test_token(user_ids[0], issuer="todo-user-service"),
+    ):
+        for path in ("/api/users/me", "/api/todos"):
+            status, _ = call("GET", path, token=invalid_token)
+            assert status in (401, 403), (
+                f"{path} accepted a signed JWT with invalid issuer/audience: HTTP {status}"
+            )
 
     status, _ = call("POST", "/api/todos", {
         "title": "Anonymous attempt",
