@@ -86,7 +86,8 @@ class RefreshSessionStoreTest {
     void csrfBootstrapEligibilityRejectsExpiredAndRevokedTokens() {
         String expired = createActiveToken();
         String revoked = createActiveToken();
-        jdbc.update("UPDATE refresh_sessions SET expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second' " +
+        jdbc.update("UPDATE refresh_sessions SET created_at = CURRENT_TIMESTAMP - INTERVAL '2 minutes', " +
+                "expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second' " +
                 "WHERE token_fingerprint = ?", RefreshTokenMaterial.fingerprint(expired));
         jdbc.update("UPDATE refresh_sessions SET revoked_at = CURRENT_TIMESTAMP " +
                 "WHERE token_fingerprint = ?", RefreshTokenMaterial.fingerprint(revoked));
