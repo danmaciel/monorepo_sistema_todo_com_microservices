@@ -67,6 +67,18 @@ def check_refresh_http_scenario(username, password):
         "refresh secret leaked in response body"
     )
 
+    # CSRF bootstrap must not rotate the refresh token. It requires an
+    # existing active cookie and explicit trusted Origin, even after reload.
+    status, _, bootstrap_headers = session_http("POST", "/api/users/session/csrf",
+                                                cookie=previous_cookie)
+    expect(204, status, "bootstrap CSRF for active session")
+    assert bootstrap_headers.get("X-CSRF-Token") == previous_csrf
+
+    status, _, _ = session_http("POST", "/api/users/session/csrf",
+                               cookie=previous_cookie,
+                               origin="https://untrusted.example.invalid")
+    assert status in (403, 404), "bootstrap must reject an untrusted Origin"
+
     status, _, _ = session_http("POST", "/api/users/refresh",
                                cookie=previous_cookie, csrf="invalid")
     expect(403, status, "invalid CSRF must not rotate session")
@@ -83,6 +95,9 @@ def check_refresh_http_scenario(username, password):
     successor_csrf = headers.get("X-CSRF-Token")
     assert successor_cookie != previous_cookie, "rotation must replace cookie"
     assert successor_csrf and successor_csrf != previous_csrf, "rotation must replace CSRF"
+    status, _, _ = session_http("POST", "/api/users/session/csrf",
+                               cookie=previous_cookie)
+    expect(401, status, "consumed refresh cannot bootstrap CSRF")
     assert successor_cookie.split("=", 1)[1] not in json.dumps(refreshed)
     status, profile = call("GET", "/api/users/me", token=refreshed["token"])
     expect(200, status, "newly refreshed access JWT")
@@ -91,6 +106,9 @@ def check_refresh_http_scenario(username, password):
     status, _, headers = session_http("POST", "/api/users/logout",
                                      cookie=successor_cookie, csrf=successor_csrf)
     expect(204, status, "server-side refresh family logout")
+    status, _, _ = session_http("POST", "/api/users/session/csrf",
+                               cookie=successor_cookie)
+    expect(401, status, "revoked cookie cannot bootstrap CSRF")
     assert "Max-Age=0" in headers.get("Set-Cookie", ""), "logout must delete refresh cookie"
 
     status, _, _ = session_http("POST", "/api/users/refresh",
