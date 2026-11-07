@@ -77,9 +77,9 @@ public class RefreshHttpBoundaryFilter extends OncePerRequestFilter {
             return;
         }
         if ("/users/session/csrf".equals(request.getServletPath())) {
-            // A safe GET is allowed to retrieve only the CSRF proof for an
+            // A read-only POST retrieves only the CSRF proof for an
             // existing active cookie; the controller verifies DB eligibility.
-            if (!"GET".equals(request.getMethod())) {
+            if (!"POST".equals(request.getMethod())) {
                 response.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
                 return;
             }
