@@ -5,6 +5,8 @@ import { isJwtActive } from '../utils/session'
 
 // One refresh attempt at a time per tab, shared by bootstrap and API requests.
 let refreshInFlight = null
+let bootstrapInFlight = null
+let sessionVersion = 0
 
 const emptySession = {
   user: null,
@@ -34,18 +36,25 @@ export const useAuthStore = create(
       // Called once by the app on startup, never stores refresh material in JS.
       bootstrapSession: async () => {
         if (!sessionMode) return
-        set({ isBootstrapping: true })
-        try {
-          const response = await sessionService.bootstrap()
-          const csrf = response.headers?.['x-csrf-token']
-          if (typeof csrf !== 'string' || !csrf) throw new Error('CSRF indisponível')
-          set({ csrf })
-          await get().refreshSession()
-        } catch {
-          set(emptySession)
-        } finally {
-          set({ isBootstrapping: false })
-        }
+        if (bootstrapInFlight) return bootstrapInFlight
+        const version = sessionVersion
+        bootstrapInFlight = (async () => {
+          set({ isBootstrapping: true })
+          try {
+            const response = await sessionService.bootstrap()
+            if (version !== sessionVersion) return
+            const csrf = response.headers?.['x-csrf-token']
+            if (typeof csrf !== 'string' || !csrf) throw new Error('CSRF indisponível')
+            set({ csrf })
+            await get().refreshSession()
+          } catch {
+            if (version === sessionVersion) set(emptySession)
+          } finally {
+            set({ isBootstrapping: false })
+            bootstrapInFlight = null
+          }
+        })()
+        return bootstrapInFlight
       },
 
       refreshSession: async () => {
@@ -53,13 +62,15 @@ export const useAuthStore = create(
         if (refreshInFlight) return refreshInFlight
         const csrf = get().csrf
         if (!csrf) return null
+        const version = sessionVersion
 
         refreshInFlight = (async () => {
           try {
             const response = await sessionService.refresh(csrf)
+            if (version !== sessionVersion) return null
             return applySessionResponse(response, set)
           } catch {
-            set(emptySession)
+            if (version === sessionVersion) set(emptySession)
             return null
           } finally {
             refreshInFlight = null
@@ -75,6 +86,7 @@ export const useAuthStore = create(
             ? await sessionService.login({ username, password })
             : await authService.login({ username, password })
           if (sessionMode) {
+            sessionVersion++
             applySessionResponse(response, set)
           } else {
             const { token, user } = response.data
@@ -98,6 +110,7 @@ export const useAuthStore = create(
           if (sessionMode) {
             // Registration's legacy JWT is intentionally ignored.
             const loginResponse = await sessionService.login({ username, password })
+            sessionVersion++
             applySessionResponse(loginResponse, set)
           } else {
             const { token, user } = response.data
@@ -114,9 +127,13 @@ export const useAuthStore = create(
         }
       },
 
-      clearSession: () => set(emptySession),
+      clearSession: () => {
+        sessionVersion++
+        set(emptySession)
+      },
 
       logout: async () => {
+        sessionVersion++
         if (sessionMode) {
           const csrf = get().csrf
           try {
