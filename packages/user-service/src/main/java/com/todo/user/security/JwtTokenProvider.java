@@ -58,10 +58,17 @@ public class JwtTokenProvider {
 
     public boolean validateToken(String token) {
         try {
-            Jwts.parser()
+            Claims claims = Jwts.parser()
                     .verifyWith(secretKey)
                     .build()
-                    .parseSignedClaims(token);
+                    .parseSignedClaims(token)
+                    .getPayload();
+
+            if (claims.getExpiration() == null || claims.getSubject() == null) {
+                return false;
+            }
+
+            UUID.fromString(claims.getSubject());
             return true;
         } catch (JwtException | IllegalArgumentException e) {
             return false;
