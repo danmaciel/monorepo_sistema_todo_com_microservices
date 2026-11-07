@@ -43,6 +43,33 @@ class RefreshHttpBoundaryFilterTest {
     }
 
     @Test
+    void csrfBootstrapRequiresOriginAndCookieButNotAStaleCsrfHeader() throws Exception {
+        var filter = enabledFilter();
+        var good = request("POST", "/users/session/csrf");
+        good.addHeader("Origin", ALLOWED_ORIGIN);
+        good.setCookies(new Cookie(RefreshCookiePolicy.COOKIE_NAME, TOKEN));
+        var chain = new MockFilterChain();
+        filter.doFilter(good, new MockHttpServletResponse(), chain);
+        assertNotNull(chain.getRequest());
+
+        var noOrigin = request("POST", "/users/session/csrf");
+        noOrigin.setCookies(new Cookie(RefreshCookiePolicy.COOKIE_NAME, TOKEN));
+        assertEquals(403, status(filter, noOrigin));
+
+        var noCookie = request("POST", "/users/session/csrf");
+        noCookie.addHeader("Origin", ALLOWED_ORIGIN);
+        assertEquals(403, status(filter, noCookie));
+
+        var get = request("GET", "/users/session/csrf");
+        get.addHeader("Origin", ALLOWED_ORIGIN);
+        get.setCookies(new Cookie(RefreshCookiePolicy.COOKIE_NAME, TOKEN));
+        assertEquals(405, status(filter, get));
+
+        assertEquals(404, status(new RefreshHttpBoundaryFilter(false, "", ""),
+                request("POST", "/users/session/csrf")));
+    }
+
+    @Test
     void disabledByDefaultRejectsReservedPathsWithoutASecret() throws Exception {
         var filter = new RefreshHttpBoundaryFilter(false, "", "");
         assertEquals(404, status(filter, request("POST", "/users/refresh")));
