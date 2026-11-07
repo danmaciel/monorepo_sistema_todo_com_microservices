@@ -88,4 +88,20 @@ class JwtTokenProviderContractTest {
 
         assertFalse(provider.validateToken(token));
     }
+
+    @Test
+    void acceptsNewIssuedContractWhileLegacyTokensRemainValid() {
+        UUID userId = UUID.randomUUID();
+        String token = Jwts.builder()
+                .subject(userId.toString())
+                .issuer("todo-user-service")
+                .audience().add("todo-api").and()
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 60_000L))
+                .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8)))
+                .compact();
+
+        assertTrue(provider.validateToken(token));
+        assertEquals(userId, provider.getUserIdFromToken(token));
+    }
 }

@@ -13,6 +13,9 @@ import java.util.UUID;
 @Component
 public class JwtTokenProvider {
 
+    private static final String TOKEN_ISSUER = "todo-user-service";
+    private static final String TOKEN_AUDIENCE = "todo-api";
+
     private final SecretKey secretKey;
     private final long jwtExpiration;
 
@@ -29,6 +32,8 @@ public class JwtTokenProvider {
 
         return Jwts.builder()
                 .subject(userId.toString())
+                .issuer(TOKEN_ISSUER)
+                .audience().add(TOKEN_AUDIENCE).and()
                 .claim("username", username)
                 .issuedAt(now)
                 .expiration(expiryDate)

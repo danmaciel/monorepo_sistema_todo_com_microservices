@@ -23,6 +23,13 @@ class JwtTokenProviderContractTest {
         assertTrue(provider.validateToken(token));
         assertEquals(userId, provider.getUserIdFromToken(token));
         assertEquals("tester", provider.getUsernameFromToken(token));
+        var claims = Jwts.parser()
+                .verifyWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8)))
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
+        assertEquals("todo-user-service", claims.getIssuer());
+        assertTrue(claims.getAudience().contains("todo-api"));
     }
 
     @Test
@@ -82,5 +89,19 @@ class JwtTokenProviderContractTest {
                 .compact();
 
         assertFalse(provider.validateToken(token));
+    }
+
+    @Test
+    void acceptsPreviouslyIssuedTokenWithoutIssuerOrAudienceDuringTransition() {
+        UUID userId = UUID.randomUUID();
+        String legacy = Jwts.builder()
+                .subject(userId.toString())
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 60_000L))
+                .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8)))
+                .compact();
+
+        assertTrue(provider.validateToken(legacy));
+        assertEquals(userId, provider.getUserIdFromToken(legacy));
     }
 }
