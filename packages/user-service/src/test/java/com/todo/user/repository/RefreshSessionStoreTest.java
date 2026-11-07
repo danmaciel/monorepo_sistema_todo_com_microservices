@@ -326,9 +326,9 @@ class RefreshSessionStoreTest {
 
         var successor = rotations.rotate(parent).orElseThrow();
 
-        assertEquals(2, store.revokeFamilyByPresentedToken(successor.token()),
+        assertEquals(2, rotations.revokeFamily(successor.token()),
                 "logout-like internal revocation must cover parent and successor");
-        assertEquals(0, store.revokeFamilyByPresentedToken(successor.token()),
+        assertEquals(0, rotations.revokeFamily(successor.token()),
                 "repeated revocation must not change an already revoked family");
         assertTrue(rotations.rotate(successor.token()).isEmpty());
 
@@ -352,11 +352,85 @@ class RefreshSessionStoreTest {
                         "expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second' " +
                         "WHERE token_fingerprint = ?", RefreshTokenMaterial.fingerprint(expired));
 
-        assertEquals(0, store.revokeFamilyByPresentedToken(null));
-        assertEquals(0, store.revokeFamilyByPresentedToken(" "));
-        assertEquals(0, store.revokeFamilyByPresentedToken(RefreshTokenMaterial.generate()));
-        assertEquals(0, store.revokeFamilyByPresentedToken(expired));
+        assertEquals(0, rotations.revokeFamily(null));
+        assertEquals(0, rotations.revokeFamily(" "));
+        assertEquals(0, rotations.revokeFamily(RefreshTokenMaterial.generate()));
+        assertEquals(0, rotations.revokeFamily(expired));
         assertTrue(rotations.rotate(active).isPresent(),
                 "invalid revocation attempts must not affect unrelated active sessions");
+    }
+
+    @Test
+    void revocationWaitsForInFlightRotationAndRevokesItsSuccessor() throws Exception {
+        String parent = createActiveToken();
+        RefreshSessionStore pausedStore = spy(store);
+        CountDownLatch rotationReachedInsert = new CountDownLatch(1);
+        CountDownLatch allowInsert = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            rotationReachedInsert.countDown();
+            if (!allowInsert.await(15, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("rotation insertion gate timed out");
+            }
+            return invocation.callRealMethod();
+        }).when(pausedStore).create(any(RefreshSession.class));
+
+        var service = new RefreshSessionRotationService(
+                pausedStore, new DataSourceTransactionManager(dataSource));
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<RefreshSessionRotationService.RotationResult> rotating =
+                    executor.submit(() -> service.rotate(parent).orElseThrow());
+            assertTrue(rotationReachedInsert.await(15, TimeUnit.SECONDS),
+                    "rotation must hold family lock before inserting successor");
+
+            Future<Integer> revoking = executor.submit(() -> service.revokeFamily(parent));
+            // Release rotation; revocation must then observe its committed successor.
+            allowInsert.countDown();
+
+            var successor = rotating.get(25, TimeUnit.SECONDS);
+            assertEquals(2, revoking.get(25, TimeUnit.SECONDS));
+            assertTrue(service.rotate(successor.token()).isEmpty(),
+                    "a successor must not stay usable after family revocation");
+        } finally {
+            allowInsert.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void rotationCannotCreateSuccessorAfterCommittedRevocation() throws Exception {
+        String parent = createActiveToken();
+        RefreshSessionStore pausedStore = spy(store);
+        CountDownLatch revocationReachedUpdate = new CountDownLatch(1);
+        CountDownLatch allowRevoke = new CountDownLatch(1);
+        doAnswer(invocation -> {
+            revocationReachedUpdate.countDown();
+            if (!allowRevoke.await(15, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("revocation update gate timed out");
+            }
+            return invocation.callRealMethod();
+        }).when(pausedStore).revokeFamilyByPresentedToken(parent);
+
+        var service = new RefreshSessionRotationService(
+                pausedStore, new DataSourceTransactionManager(dataSource));
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<Integer> revoking = executor.submit(() -> service.revokeFamily(parent));
+            assertTrue(revocationReachedUpdate.await(15, TimeUnit.SECONDS),
+                    "revocation must hold family lock before updating");
+            Future<Boolean> rotating = executor.submit(() -> service.rotate(parent).isPresent());
+            allowRevoke.countDown();
+
+            assertEquals(1, revoking.get(25, TimeUnit.SECONDS));
+            assertFalse(rotating.get(25, TimeUnit.SECONDS),
+                    "revoked session must not create a successor");
+            assertEquals(1, jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM refresh_sessions WHERE token_fingerprint = ? " +
+                            "AND revoked_at IS NOT NULL",
+                    Integer.class, RefreshTokenMaterial.fingerprint(parent)));
+        } finally {
+            allowRevoke.countDown();
+            executor.shutdownNow();
+        }
     }
 }
