@@ -12,6 +12,12 @@ import java.util.UUID;
 @Component
 public class JwtTokenProvider {
 
+    private static final String EXPECTED_ISSUER = "todo-user-service";
+    private static final String EXPECTED_AUDIENCE = "todo-api";
+
+    @Value("${jwt.accept-legacy-without-claims:true}")
+    private boolean acceptLegacyWithoutClaims = true;
+
     private final SecretKey secretKey;
 
     public JwtTokenProvider(@Value("${jwt.secret}") String jwtSecret) {
@@ -41,7 +47,16 @@ public class JwtTokenProvider {
             }
 
             UUID.fromString(claims.getSubject());
-            return true;
+
+            String issuer = claims.getIssuer();
+            var audience = claims.getAudience();
+            if (issuer == null && (audience == null || audience.isEmpty())) {
+                return acceptLegacyWithoutClaims;
+            }
+
+            return EXPECTED_ISSUER.equals(issuer)
+                    && audience != null
+                    && audience.contains(EXPECTED_AUDIENCE);
         } catch (JwtException | IllegalArgumentException e) {
             return false;
         }
