@@ -4,11 +4,11 @@ import react from '@vitejs/plugin-react'
 
 // Secure refresh cookies require HTTPS. Provide locally trusted mkcert files,
 // never commit private keys or issue insecure cookies for development.
-const certPath = process.env.VITE_DEV_HTTPS_CERT
-const keyPath = process.env.VITE_DEV_HTTPS_KEY
+const certPath = process.env.DEV_HTTPS_CERT
+const keyPath = process.env.DEV_HTTPS_KEY
 const sessionMode = process.env.VITE_SESSION_AUTH === 'true'
 if (sessionMode && (!certPath || !keyPath)) {
-  throw new Error('VITE_SESSION_AUTH=true requires VITE_DEV_HTTPS_CERT and VITE_DEV_HTTPS_KEY')
+  throw new Error('VITE_SESSION_AUTH=true requires DEV_HTTPS_CERT and DEV_HTTPS_KEY')
 }
 
 export default defineConfig({
