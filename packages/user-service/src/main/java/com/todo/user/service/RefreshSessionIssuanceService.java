@@ -3,6 +3,7 @@ package com.todo.user.service;
 import com.todo.user.repository.RefreshSessionStore;
 import com.todo.user.security.RefreshSession;
 import com.todo.user.security.RefreshTokenMaterial;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -25,6 +26,7 @@ public class RefreshSessionIssuanceService {
     private final Clock clock;
     private final Duration lifetime;
 
+    @Autowired
     public RefreshSessionIssuanceService(
             RefreshSessionStore store,
             @Value("${jwt.refresh-session-lifetime-seconds:604800}") long lifetimeSeconds) {
