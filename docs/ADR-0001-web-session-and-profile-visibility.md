@@ -29,11 +29,11 @@ Sem alterar o armazenamento, o frontend passa a verificar a claim `exp` ao resta
 
 - `GET /api/users/me`: retorna o usuário autenticado.
 - `GET /api/users/{id}`: retorna os dados **somente quando** o ID solicitado corresponde ao usuário autenticado; caso contrário, responde HTTP 403, antes da consulta ao banco.
-- `GET /api/users/exists/{id}`: atualmente permite consultar existência de conta para clientes autenticados.
+- `GET /api/users/exists/{id}`: consulta de existência restrita ao **próprio identificador autenticado**; outro identificador recebe HTTP 403, antes da consulta ao banco.
 
 **Justificativa:** o domínio de tarefas pessoais não exige visualização pública de e-mail nem compartilhamento de perfis. A restrição evita revelar dados pessoais em consultas cruzadas. O endpoint `/me` continua como caminho preferencial para o perfil autenticado.
 
-**Ressalva:** `/users/exists/{id}` ainda permite verificar a existência de usuários mediante autenticação; permanece sob revisão separada porque outros consumidores podem depender dessa consulta. O fluxo de sessão web (incluindo refresh e revogação) segue pendente.
+**Compatibilidade:** a restrição de `/users/exists/{id}` muda o comportamento para consumidores que consultavam IDs de terceiros. O frontend deste repositório não utiliza esse endpoint; qualquer integração externa deve ser verificada antes de adotar a nova política. O fluxo de sessão web (incluindo refresh e revogação) segue pendente.
 
 ## Limitações conhecidas
 
