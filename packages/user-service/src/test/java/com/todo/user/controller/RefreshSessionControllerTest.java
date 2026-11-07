@@ -58,7 +58,7 @@ class RefreshSessionControllerTest {
         String token = RefreshTokenMaterial.generate();
         when(refreshSessions.isActive(token)).thenReturn(true);
         mvc(true).perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
-                        .get("/users/session/csrf").servletPath("/users/session/csrf")
+                        .post("/users/session/csrf").servletPath("/users/session/csrf")
                         .header("Origin", ORIGIN)
                         .cookie(new Cookie(RefreshCookiePolicy.COOKIE_NAME, token)))
                 .andExpect(status().isNoContent())
@@ -74,13 +74,13 @@ class RefreshSessionControllerTest {
     void csrfBootstrapRejectsMissingOriginOrRevokedCookie() throws Exception {
         String token = RefreshTokenMaterial.generate();
         mvc(true).perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
-                        .get("/users/session/csrf").servletPath("/users/session/csrf")
+                        .post("/users/session/csrf").servletPath("/users/session/csrf")
                         .cookie(new Cookie(RefreshCookiePolicy.COOKIE_NAME, token)))
                 .andExpect(status().isForbidden());
         verifyNoInteractions(refreshSessions);
         when(refreshSessions.isActive(token)).thenReturn(false);
         mvc(true).perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
-                        .get("/users/session/csrf").servletPath("/users/session/csrf")
+                        .post("/users/session/csrf").servletPath("/users/session/csrf")
                         .header("Origin", ORIGIN)
                         .cookie(new Cookie(RefreshCookiePolicy.COOKIE_NAME, token)))
                 .andExpect(status().isUnauthorized())
