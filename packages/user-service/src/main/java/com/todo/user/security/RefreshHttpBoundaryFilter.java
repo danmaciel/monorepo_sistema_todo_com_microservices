@@ -58,7 +58,8 @@ public class RefreshHttpBoundaryFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getServletPath();
-        return !("/users/session/login".equals(path) || "/users/refresh".equals(path) || "/users/logout".equals(path));
+        return !("/users/session/login".equals(path) || "/users/session/csrf".equals(path)
+                || "/users/refresh".equals(path) || "/users/logout".equals(path));
     }
 
     @Override
@@ -73,6 +74,20 @@ public class RefreshHttpBoundaryFilter extends OncePerRequestFilter {
         }
         if (!enabled) {
             response.sendError(HttpServletResponse.SC_NOT_FOUND);
+            return;
+        }
+        if ("/users/session/csrf".equals(request.getServletPath())) {
+            // A read-only POST retrieves only the CSRF proof for an
+            // existing active cookie; the controller verifies DB eligibility.
+            if (!"POST".equals(request.getMethod())) {
+                response.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
+                return;
+            }
+            if (!origins.permits(request) || singleRefreshCookie(request) == null) {
+                response.sendError(HttpServletResponse.SC_FORBIDDEN);
+                return;
+            }
+            chain.doFilter(request, response);
             return;
         }
         if (!"POST".equals(request.getMethod())) {

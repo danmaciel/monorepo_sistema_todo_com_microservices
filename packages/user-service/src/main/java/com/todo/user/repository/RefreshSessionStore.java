@@ -61,6 +61,23 @@ public class RefreshSessionStore {
     }
 
     /**
+     * Read-only check for a currently usable, unconsumed refresh token of an
+     * enabled user. Used by CSRF bootstrap; does not rotate or mint access JWT.
+     */
+    public boolean isActive(String rawToken) {
+        if (rawToken == null || rawToken.isBlank()) {
+            return false;
+        }
+        String fingerprint = com.todo.user.security.RefreshTokenMaterial.fingerprint(rawToken);
+        return Boolean.TRUE.equals(jdbc.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM refresh_sessions r JOIN users u " +
+                        "ON u.id = r.user_id WHERE r.token_fingerprint = ? " +
+                        "AND r.consumed_at IS NULL AND r.revoked_at IS NULL " +
+                        "AND r.expires_at > CURRENT_TIMESTAMP AND u.enabled = TRUE)",
+                Boolean.class, fingerprint));
+    }
+
+    /**
      * Serializes operations on all tokens of one refresh family across instances.
      * Must be called inside the caller's transaction before claim/rotation or
      * family revocation; the PostgreSQL advisory lock lasts until commit/rollback.

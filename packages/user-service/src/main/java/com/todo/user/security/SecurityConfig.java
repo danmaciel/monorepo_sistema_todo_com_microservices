@@ -42,7 +42,7 @@ public class SecurityConfig {
                         .requestMatchers("/users/register", "/users/login").permitAll()
                         // Logout authenticates with a refresh cookie + Origin/CSRF
                         // in the fail-closed RefreshHttpBoundaryFilter, not Bearer.
-                        .requestMatchers("/users/logout", "/users/session/login", "/users/refresh").permitAll()
+                        .requestMatchers("/users/logout", "/users/session/login", "/users/session/csrf", "/users/refresh").permitAll()
                         .requestMatchers("/actuator/**").permitAll()
                         .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated())
@@ -55,7 +55,7 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(Arrays.asList("http://localhost:3000", "http://localhost:5173"));
+        configuration.setAllowedOrigins(Arrays.asList("http://localhost:3000", "http://localhost:5173", "https://localhost:3000"));
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setExposedHeaders(List.of("Authorization"));
