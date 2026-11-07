@@ -2,7 +2,7 @@
 
 ## Escopo implementado
 
-O User Service autentica credenciais e emite JWTs assinados com HS256. Os tokens contêm o UUID do usuário (`sub`), o nome de usuário e a expiração, configurada atualmente em 24 horas. O Todo Service valida localmente assinatura e validade e usa o `sub` para aplicar as regras de propriedade das tarefas.
+O User Service autentica credenciais e emite JWTs assinados com HS256. Os tokens contêm o UUID do usuário (`sub`), o nome de usuário e a expiração, configurada atualmente em 24 horas. User Service e Todo Service validam a assinatura, rejeitam tokens expirados e exigem as claims `exp` e `sub` (UUID válido). O Todo Service usa esse `sub` para aplicar as regras de propriedade das tarefas. Essas verificações não implementam revogação, validação de `iss`/`aud` ou gestão de sessões.
 
 O User Service consulta o cadastro em requisições autenticadas e recusa contas desativadas ou excluídas. O Todo Service **não** consulta o estado cadastral a cada requisição: um JWT ainda válido pode continuar autorizando tarefas após a desativação da conta.
 
