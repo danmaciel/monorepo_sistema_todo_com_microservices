@@ -53,7 +53,7 @@ export JWT_SECRET='<segredo-aleatorio-com-pelo-menos-32-bytes>'
 
 O arquivo `.env.example` traz o modelo para Compose. Não coloque segredos em `application.yml` nem em commits.
 
-CORS no Gateway está limitado às origens locais `http://localhost:3000` e `http://localhost:5173`. Uma implantação com domínio próprio precisa definir explicitamente suas origens autorizadas.
+CORS no Gateway e no Todo Service está limitado às origens locais `http://localhost:3000` e `http://localhost:5173`. Uma implantação com domínio próprio precisa definir explicitamente suas origens autorizadas. CORS restringe o acesso de navegadores e **não** substitui autenticação, autorização ou controles de rede; clientes não-navegador podem acessar serviços diretamente se estiverem expostos.
 
 ## Próximas melhorias recomendadas
 
