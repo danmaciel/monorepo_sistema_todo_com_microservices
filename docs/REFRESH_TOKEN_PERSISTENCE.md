@@ -122,3 +122,12 @@ flowchart TD
 **Trade-off de segurança versus usabilidade:** se uma resposta for perdida após o COMMIT ou duas abas enviarem o mesmo refresh token simultaneamente, a segunda tentativa pode ser interpretada como replay e revogar uma sessão legítima. Esse comportamento `fail-closed` é deliberado nesta etapa. Antes de expor a API, será necessário decidir entre coordenação de renovação no cliente, política de tolerância/idempotência de reenvios e proteção contra o uso de tokens roubados. Uma tolerância ingênua a reuso também pode facilitar ataques.
 
 **Escopo exato:** essa revogação funciona **somente para refresh sessions no User Service**. Não invalida JWTs de acesso já emitidos no Todo Service e não constitui logout remoto ou revogação distribuída completa. A integração HTTP/frontend ainda não existe.
+
+
+## Revogação interna de uma família apresentada
+
+O repositório implementa `revokeFamilyByPresentedToken`, que recebe um refresh token opaco, calcula seu fingerprint SHA-256 e revoga os **registros já existentes** da família correspondente, desde que o token apresentado ainda esteja dentro da validade e não esteja revogado. Um token desconhecido, expirado ou já revogado não seleciona uma família. Uma segunda chamada não modifica novos registros.
+
+Os testes com PostgreSQL verificam que a operação bloqueia a rotação de um sucessor já criado, é repetível sem efeitos adicionais e não altera famílias independentes.
+
+**Esta operação interna ainda não constitui logout.** Não existe endpoint HTTP, vinculação a um login de navegador, limpeza de cookie, proteção CSRF ou revogação de access JWT. Além disso, **não está demonstrada a segurança contra uma rotação concorrente de outro token da mesma família**: uma atualização que seleciona os registros existentes pode concorrer com a inserção de sucessores. Antes de expor a operação para clientes, será preciso coordenar rotação e revogação no nível da família e testar essa disputa com PostgreSQL real.

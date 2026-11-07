@@ -316,4 +316,47 @@ class RefreshSessionStoreTest {
                         UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
                         fingerprint, Instant.now().plusSeconds(600), null)));
     }
+
+    @Test
+    void familyRevocationBlocksExistingSuccessorWithoutAffectingOtherFamilies() {
+        String parent = createActiveToken();
+        String unrelated = createActiveToken();
+        String parentFingerprint = RefreshTokenMaterial.fingerprint(parent);
+        String unrelatedFingerprint = RefreshTokenMaterial.fingerprint(unrelated);
+
+        var successor = rotations.rotate(parent).orElseThrow();
+
+        assertEquals(2, store.revokeFamilyByPresentedToken(successor.token()),
+                "logout-like internal revocation must cover parent and successor");
+        assertEquals(0, store.revokeFamilyByPresentedToken(successor.token()),
+                "repeated revocation must not change an already revoked family");
+        assertTrue(rotations.rotate(successor.token()).isEmpty());
+
+        assertEquals(2, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM refresh_sessions WHERE family_id = " +
+                        "(SELECT family_id FROM refresh_sessions WHERE token_fingerprint = ?) " +
+                        "AND revoked_at IS NOT NULL",
+                Integer.class, parentFingerprint));
+        assertEquals(0, jdbc.queryForObject(
+                "SELECT COUNT(*) FROM refresh_sessions WHERE token_fingerprint = ? " +
+                        "AND revoked_at IS NOT NULL",
+                Integer.class, unrelatedFingerprint));
+        assertTrue(rotations.rotate(unrelated).isPresent());
+    }
+
+    @Test
+    void unknownExpiredOrMissingTokenCannotRevokeRefreshFamily() {
+        String active = createActiveToken();
+        String expired = createActiveToken();
+        jdbc.update("UPDATE refresh_sessions SET created_at = CURRENT_TIMESTAMP - INTERVAL '2 minutes', " +
+                        "expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second' " +
+                        "WHERE token_fingerprint = ?", RefreshTokenMaterial.fingerprint(expired));
+
+        assertEquals(0, store.revokeFamilyByPresentedToken(null));
+        assertEquals(0, store.revokeFamilyByPresentedToken(" "));
+        assertEquals(0, store.revokeFamilyByPresentedToken(RefreshTokenMaterial.generate()));
+        assertEquals(0, store.revokeFamilyByPresentedToken(expired));
+        assertTrue(rotations.rotate(active).isPresent(),
+                "invalid revocation attempts must not affect unrelated active sessions");
+    }
 }

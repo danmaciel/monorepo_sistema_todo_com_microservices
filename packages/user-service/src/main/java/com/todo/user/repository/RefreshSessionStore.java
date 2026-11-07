@@ -94,6 +94,31 @@ public class RefreshSessionStore {
     }
 
     /**
+     * Revokes all currently recorded sessions in the family identified by a
+     * presented, unexpired and non-revoked refresh token.
+     *
+     * This is an internal storage operation, not an HTTP logout endpoint.
+     * A token from another family cannot select the target family. The return
+     * value is the number of rows newly marked as revoked.
+     *
+     * Concurrent rotation versus revocation needs its own coordination
+     * strategy before this method is exposed as a logout contract.
+     */
+    public int revokeFamilyByPresentedToken(String rawToken) {
+        if (rawToken == null || rawToken.isBlank()) {
+            return 0;
+        }
+        String fingerprint = com.todo.user.security.RefreshTokenMaterial.fingerprint(rawToken);
+        return jdbc.update(
+                "UPDATE refresh_sessions SET revoked_at = CURRENT_TIMESTAMP " +
+                        "WHERE family_id = (SELECT family_id FROM refresh_sessions " +
+                        "WHERE token_fingerprint = ? AND revoked_at IS NULL " +
+                        "AND expires_at > CURRENT_TIMESTAMP) " +
+                        "AND revoked_at IS NULL",
+                fingerprint);
+    }
+
+    /**
      * Atomically marks a still-active token as consumed. The database clock
      * determines expiration, preventing application-server clock drift.
      *
