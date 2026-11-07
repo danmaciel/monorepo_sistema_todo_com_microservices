@@ -87,8 +87,25 @@ def main():
             title = "Chromium E2E " + uuid.uuid4().hex[:8]
             page.get_by_role("button", name="Nova Tarefa").click()
             page.get_by_placeholder("Qual é a sua nova tarefa?").fill(title)
-            page.get_by_role("button", name="Adicionar Tarefa").click()
-            expect(page.get_by_role("heading", name=title)).to_be_visible()
+            with page.expect_response(
+                lambda response: response.url.endswith("/api/todos")
+                and response.request.method == "POST"
+            ) as created:
+                page.get_by_role("button", name="Adicionar Tarefa").click()
+            assert created.value.status in (200, 201), (
+                f"Create Todo endpoint returned HTTP {created.value.status}"
+            )
+            with page.expect_response(
+                lambda response: "/api/todos" in response.url
+                and response.request.method == "GET"
+            ) as fetched:
+                page.get_by_role("heading", name="Minhas Tarefas").wait_for()
+                # FetchTodos is triggered by createTodo's completion.
+                # A response listener below confirms this happened.
+            assert fetched.value.status == 200, (
+                f"List Todos endpoint returned HTTP {fetched.value.status}"
+            )
+            expect(page.get_by_role("heading", name=title)).to_be_visible(timeout=15000)
 
             # Reload must bootstrap CSRF from the HttpOnly cookie, then rotate
             # refresh session and restore an in-memory access JWT.
