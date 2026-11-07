@@ -42,7 +42,7 @@ public class SecurityConfig {
                         .requestMatchers("/users/register", "/users/login").permitAll()
                         // Logout authenticates with a refresh cookie + Origin/CSRF
                         // in the fail-closed RefreshHttpBoundaryFilter, not Bearer.
-                        .requestMatchers("/users/logout", "/users/session/login", "/users/refresh").permitAll()
+                        .requestMatchers("/users/logout", "/users/session/login", "/users/session/csrf", "/users/refresh").permitAll()
                         .requestMatchers("/actuator/**").permitAll()
                         .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated())
