@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Two-tab baseline: stale CSRF after another tab rotates a shared refresh cookie.
+"""Two-tab logout: stale CSRF is recovered before revoking shared session.
 
 Only for disposable HTTPS CI. This deliberately exercises a known limitation,
 NOT concurrent refresh coordination. Never log credentials, cookies or tokens.
@@ -52,40 +52,37 @@ def main():
             expect(second.get_by_role("heading", name="Minhas Tarefas")).to_be_visible()
             assert_browser_cookie(context)
 
-            # First tab still has the original CSRF in memory, while the
-            # shared cookie was rotated by second tab. This must be rejected
-            # before the refresh-family replay handler; it is not a fix.
+            # First tab has old in-memory CSRF, but logout now obtains the
+            # current CSRF under the same cross-tab lock used by refresh.
             with first.expect_response(
                 lambda response: response.url.endswith("/api/users/logout")
                 and response.request.method == "POST"
-            ) as stale_logout:
+            ) as logout:
                 first.get_by_role("button", name="Sair").click()
-            assert stale_logout.value.status == 403, (
-                "Expected fail-closed rejection of stale CSRF in first tab"
+            assert logout.value.status == 204, (
+                "Logout should revoke the current refresh family despite stale tab state"
             )
             expect(first.get_by_role("button", name="Entrar")).to_be_visible()
+            assert not any(
+                cookie["name"] == "__Secure-todo-refresh"
+                for cookie in context.cookies(FRONTEND + "/api/users/refresh")
+            ), "Refresh cookie remains after cross-tab logout"
 
-            # CSRF denial must NOT revoke the surviving session family.
+            # The other tab can retain an earlier access JWT in memory:
+            # revoking refresh does not immediately revoke bearer JWTs.
+            # On reload, bootstrap must fail without a valid refresh cookie.
             with second.expect_response(
-                lambda response: response.url.endswith("/api/users/refresh")
+                lambda response: response.url.endswith("/api/users/session/csrf")
                 and response.request.method == "POST"
-            ) as survivor_refresh:
+            ) as denied_bootstrap:
                 second.reload(wait_until="domcontentloaded")
-            assert survivor_refresh.value.status == 200, (
-                "Stale-CSRF rejection unexpectedly broke the surviving session"
+            assert denied_bootstrap.value.status in (401, 403), (
+                "Second tab unexpectedly restored a revoked refresh session"
             )
-            expect(second.get_by_role("heading", name="Minhas Tarefas")).to_be_visible()
+            expect(second.get_by_role("button", name="Entrar")).to_be_visible()
             assert_tokens_not_persisted(first)
             assert_tokens_not_persisted(second)
-
-            # End the disposable session via the tab with current CSRF.
-            with second.expect_response(
-                lambda response: response.url.endswith("/api/users/logout")
-                and response.request.method == "POST"
-            ) as logout:
-                second.get_by_role("button", name="Sair").click()
-            assert logout.value.status == 204
-            print("Two-tab baseline passed: stale CSRF denied, other tab remains valid")
+            print("Two-tab logout passed: stale tab revokes current refresh family")
         finally:
             context.close()
             browser.close()
