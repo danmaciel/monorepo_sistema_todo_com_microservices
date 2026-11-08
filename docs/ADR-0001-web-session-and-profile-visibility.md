@@ -1,6 +1,8 @@
 # ADR-0001 — Sessões web e visibilidade de perfis
 
-**Status:** Parcialmente aceito — acesso a perfis restrito ao próprio usuário; estratégia de armazenamento e revogação de tokens continua proposta.
+**Status:** política de acesso a perfis aceita e implementada; armazenamento do modo legado permanece inalterado. A sessão HTTPS com refresh rotativo e cookie seguro está disponível **apenas no modo opt-in de demonstração**, desabilitado por padrão; revogação imediata de JWTs no Todo Service continua não implementada.
+
+> **Leitura histórica:** as alternativas e observações sobre “fluxo de sessão pendente” abaixo descrevem o momento da decisão original. O fluxo opt-in posterior é documentado em [BROWSER_SESSION_LOCAL_DEMO.md](BROWSER_SESSION_LOCAL_DEMO.md); ele não substituiu o fluxo legado.
 
 ## Contexto
 
