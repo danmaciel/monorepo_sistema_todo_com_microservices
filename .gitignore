@@ -71,3 +71,10 @@ error.log
 **/surefire-reports/
 coverage/
 .nyc_output/
+# Local TLS certificates and private key material (never commit)
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer

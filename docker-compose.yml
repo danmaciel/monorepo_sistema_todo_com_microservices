@@ -81,7 +81,7 @@ services:
       ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka/
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     networks:
       - todo-network
     depends_on:
@@ -161,7 +161,7 @@ services:
     environment:
       VITE_API_URL: http://localhost:8080
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     networks:
       - todo-network
     depends_on:
