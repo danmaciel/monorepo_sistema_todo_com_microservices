@@ -1,6 +1,6 @@
-# 📝 Todo Monorepo - Sistema de Todos com Microservices
+# Sistema de gerenciamento de tarefas — microsserviços Java e React
 
-Sistema de gerenciamento de tarefas (TODO) utilizando arquitetura de microserviços.
+Projeto de demonstração técnica com React, Spring Boot, API Gateway, PostgreSQL, testes automatizados e tracing distribuído. O objetivo é estudar separação de responsabilidades, autenticação, persistência e integração entre serviços; **não se trata de uma implantação de produção**.
 
 ## 🏗️ Arquitetura
 
@@ -196,7 +196,10 @@ npm run clean
 ## 🔐 Autenticação
 
 - JWT (JSON Web Tokens)
-- Token é enviado no header: `Authorization: Bearer <token>`
+- **Modo padrão:** JWT Bearer no cabeçalho `Authorization`, com expiração de 24 horas e persistência do frontend legado em `localStorage`.
+- **Modo opcional de demonstração HTTPS:** login de sessão, refresh rotativo persistido por fingerprint SHA-256 no PostgreSQL, cookie `HttpOnly; Secure; SameSite=Strict`, validação de Origin/CSRF, access JWT em memória e coordenação de refresh/logout entre abas com Web Locks.
+- O modo opcional é **desabilitado por padrão**; consulte [passo a passo e limites](docs/BROWSER_SESSION_LOCAL_DEMO.md). O User Service permite configurar o TTL com `JWT_ACCESS_EXPIRATION_MS` (24 horas por padrão). Não reduzir o prazo no cliente legado sem migração de sessão.
+- Logout revoga refresh no servidor quando confirmado, mas não invalida imediatamente access JWTs emitidos; ver [decisões de segurança](docs/JWT_SECURITY.md).
 
 ## 🐳 Docker
 
@@ -233,7 +236,7 @@ npm run dev --workspace=web-app
 
 ## 🧪 Qualidade, decisões e limites
 
-A pipeline [Services CI](.github/workflows/ci.yml) executa `mvn verify` para os quatro serviços Java e o build do frontend. Além dos testes unitários de autenticação e propriedade de tarefas, a pipeline [Docker Compose E2E](.github/workflows/e2e.yml) já testa o Gateway, PostgreSQL e serviços reais: cadastro, login, criação e edição de tarefas, isolamento entre usuários e exclusão. Ela também verifica traces exportados ao Zipkin.
+A pipeline [Services CI](.github/workflows/ci.yml) executa verificações dos serviços Java e do frontend. Além dos testes unitários de autenticação e propriedade de tarefas, a pipeline [Docker Compose E2E](.github/workflows/e2e.yml) já testa o Gateway, PostgreSQL e serviços reais: cadastro, login, criação e edição de tarefas, isolamento entre usuários e exclusão. Ela também verifica traces exportados ao Zipkin.
 
 O gateway utiliza rotas estáticas; o Eureka registra os serviços, mas não é usado como balanceador dinâmico pelas rotas atuais. O PostgreSQL é compartilhado entre serviços, e o Redis do Compose ainda não é usado como cache pela aplicação. Essas escolhas e os próximos passos estão explicados em [Arquitetura e decisões técnicas](docs/ARCHITECTURE.md).
 
@@ -251,8 +254,10 @@ A implementação e os limites de segurança estão registrados nos documentos a
 - [Persistência PostgreSQL, Flyway e concorrência](docs/REFRESH_TOKEN_PERSISTENCE.md)
 - [ADR-0001: sessões web e acesso a perfis](docs/ADR-0001-web-session-and-profile-visibility.md)
 - [ADR-0002: alternativas para revogação distribuída](docs/ADR-0002-distributed-token-revocation.md)
+- [ADR-0003: cookie de refresh e proteção CSRF](docs/ADR-0003-refresh-cookie-transport-and-csrf.md)
+- [Demonstração HTTPS de sessão web e testes com múltiplas abas](docs/BROWSER_SESSION_LOCAL_DEMO.md)
 
-**Estado de implementação:** a tabela de refresh sessions e o consumo único estão implementados e testados, mas não existem endpoints de refresh/logout no backend nem rotação transacional completa. A autenticação atual permanece com access JWT de 24 horas.
+**Estado verificado:** o fluxo HTTP opcional de login/refresh/logout, a rotação atômica no PostgreSQL, os testes de replay e os cenários HTTPS com Chromium estão implementados. O modo padrão mantém JWT de 24 horas. **Ainda não estão resolvidas** a recuperação de resposta perdida após commit, a revogação imediata de access JWT no Todo Service, a migração de clientes legados e a validação para implantação real. O teste de duas abas não substitui testes de carga, falhas ou compatibilidade em outros navegadores.
 
 ## 📚 Documentação Adicional
 
