@@ -141,12 +141,19 @@ export const useAuthStore = create(
       logout: async () => {
         sessionVersion++
         if (sessionMode) {
-          const csrf = get().csrf
           try {
-            if (csrf) await sessionService.logout(csrf)
+            await withRefreshLock(async () => {
+              // Another tab may have rotated the shared HttpOnly cookie.
+              // Obtain the matching CSRF while holding the same lock used for
+              // refresh, then revoke the current family without rotating it.
+              const bootstrap = await sessionService.bootstrap()
+              const csrf = bootstrap.headers?.['x-csrf-token']
+              if (typeof csrf !== 'string' || !csrf) throw new Error('CSRF indisponível')
+              await sessionService.logout(csrf)
+            })
           } catch {
-            // Clear locally even if the connection fails. Server revocation is
-            // not guaranteed in this case; do not claim it succeeded.
+            // Logout is local-only if backend confirmation fails.
+            // No claim of server-side revocation is made.
           }
         }
         set({ ...emptySession, error: null })
