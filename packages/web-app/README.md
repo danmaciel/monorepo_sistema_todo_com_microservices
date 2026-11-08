@@ -1,6 +1,6 @@
 # 🌐 Web App - Frontend React
 
-Aplicação frontend do sistema de Todos usando React + Vite + TailwindCSS.
+Interface React + Vite + TailwindCSS para gerenciamento de tarefas. Este projeto é uma demonstração técnica local, não uma implantação de produção.
 
 ## 📋 Descrição
 
@@ -68,14 +68,16 @@ docker run -p 3000:3000 todo-web
 
 | Variável | Padrão | Descrição |
 |----------|--------|-----------|
-| `VITE_API_URL` | `http://localhost:8080` | URL base da API |
+| `VITE_API_URL` | `http://localhost:8080` | URL base da API no modo legado |
+| `VITE_SESSION_AUTH` | `false` | Habilita somente em execução HTTPS opt-in a autenticação de sessão com cookie de refresh e CSRF |
 
 ## 📱 Funcionalidades
 
 ### Autenticação
 - Registro de novos usuários
 - Login com username/senha
-- JWT token storage (localStorage)
+- Modo padrão: access JWT Bearer persistido em `localStorage` (limitação de segurança documentada)
+- Modo HTTPS opt-in: JWT em memória, refresh em cookie HttpOnly/Secure/SameSite, CSRF e coordenação Web Locks entre abas. Consulte [guia de execução](../../docs/BROWSER_SESSION_LOCAL_DEMO.md)
 - Logout automático em caso de token expirado
 
 ### Gerenciamento de Tarefas
