@@ -20,14 +20,14 @@ O Gateway faz **roteamento estático por hostname/porta no Docker Compose**, emb
 
 ## Autenticação e autorização
 
-1. O User Service valida credenciais e emite um JWT assinado.
+1. O User Service valida credenciais e emite um JWT assinado (fluxo padrão); o fluxo HTTP de refresh é habilitado apenas por configuração explícita.
 2. O frontend envia `Authorization: Bearer <token>`.
 3. O Todo Service valida a assinatura com o mesmo `JWT_SECRET` e extrai o identificador do usuário.
 4. A camada de serviço verifica o proprietário da tarefa antes das operações individuais.
 
-Os dois serviços precisam receber o mesmo segredo forte. Um segredo simétrico compartilhado é simples para estudo, mas aumenta o impacto de vazamento. Em sistemas reais, avaliar assinatura assimétrica, emissor/audiência, rotação de chaves e validação centralizada.
+Os dois serviços precisam receber o mesmo segredo forte. Um segredo simétrico compartilhado é simples para estudo, mas aumenta o impacto de vazamento. Em sistemas reais, avaliar assinatura assimétrica, rotação de chaves e requisitos de validação/estado de sessão. Os validadores já verificam emissor e audiência, com compatibilidade opcional para JWTs antigos sem essas claims.
 
-**Revogação distribuída:** hoje o access token dura 24 horas. O User Service recusa JWT de usuário desativado, mas o Todo Service valida o token localmente e ainda pode autorizá-lo até expirar. A análise de alternativas, trade-offs e um plano incremental estão no [ADR-0002 — Revogação de tokens entre serviços](ADR-0002-distributed-token-revocation.md). Este ADR é uma proposta: refresh tokens, Redis para revogação e cookies HttpOnly **não estão implementados**.
+**Sessões e revogação:** o access token dura 24 horas por padrão (TTL parametrizável no User Service). O modo HTTP de sessão é opcional e desabilitado por padrão: ele fornece refresh rotativo, cookie HttpOnly e CSRF/Origin, com coordenação Web Locks em abas da mesma origem. O User Service recusa JWT de usuário desativado, mas o Todo Service valida JWT localmente e ainda pode autorizá-lo até expirar. **Não há revogação imediata distribuída de access JWTs nem Redis integrado para esse fim.** Ver [ADR-0002](ADR-0002-distributed-token-revocation.md) e [demonstração HTTPS](BROWSER_SESSION_LOCAL_DEMO.md).
 
 ## Persistência e isolamento
 
