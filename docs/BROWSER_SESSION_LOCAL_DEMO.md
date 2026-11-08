@@ -6,7 +6,7 @@
 
 - Login em `POST /api/users/session/login` autentica por senha e entrega o access JWT no corpo, cookie de refresh `HttpOnly; Secure; SameSite=Strict` e `X-CSRF-Token` na resposta.
 - O React mantém o access JWT e o CSRF **somente em memória**. Não grava tokens no `localStorage`.
-- No carregamento/recarregamento da página, o React chama `POST /api/users/session/csrf`. O User Service só retorna o CSRF se houver cookie válido, não consumido, não revogado e pertencente a conta habilitada. Depois o React renova o access JWT.
+- No carregamento/recarregamento da página, o React adquire um **Web Lock exclusivo entre abas da mesma origem**, chama `POST /api/users/session/csrf` e renova o access JWT ainda sob esse lock. O User Service só retorna o CSRF se houver cookie válido, não consumido, não revogado e pertencente a conta habilitada. O fluxo falha de forma restritiva quando Web Locks não está disponível.
 - Requisições do React usam o proxy **mesma origem** `/api` para o Gateway, evitando habilitar CORS credenciado. Ao receber 401 de uma chamada de API, o frontend faz uma tentativa de refresh e repete a chamada uma única vez. Requisições concorrentes da mesma aba compartilham a renovação.
 - O botão de sair envia `POST /api/users/logout` e limpa a sessão local. Uma falha de rede pode impedir a revogação no servidor, mesmo que o frontend limpe seus dados.
 
@@ -55,7 +55,7 @@ Ao mudar entre os modos, limpe no navegador os dados antigos do aplicativo (`aut
 ## Limitações conhecidas
 
 - O CI também executa um teste automatizado com **Chromium e Playwright em HTTPS local**, usando certificado temporário e contexto de navegador isolado. Esse teste cobre login, cookie HttpOnly/Secure/SameSite, criação e recuperação de tarefa, renovação após recarregar, ausência de access JWT/CSRF no armazenamento do navegador e logout. **Não substitui validação em outros navegadores ou testes de múltiplas abas**.
-- A coordenação de refresh é apenas **por aba**. Duas abas ou uma resposta perdida após COMMIT ainda podem provocar replay e revogação da família; será necessário definir a política de recuperação.
+- O refresh no modo opt-in usa **Web Locks** para serializar o par bootstrap-CSRF + rotação entre abas **na mesma origem e no mesmo perfil de navegador**. Requisições concorrentes dentro da mesma aba também compartilham uma Promise. Sem Web Locks, o refresh não é tentado. Isso não abrange múltiplos dispositivos/perfis, logout concorrente, travamentos e respostas perdidas após COMMIT; esses casos ainda exigem tratamento e testes.
 - Access JWT continua com **24 horas de validade** e não é imediatamente revogado por logout. Todo Service continua validando JWT até expiração. Para uma sessão web, recomenda-se reduzir o TTL após a migração do cliente.
 - A funcionalidade opt-in está separada do frontend Docker padrão, que permanece no modo antigo. Para mostrar o novo fluxo use a configuração Vite acima.
 - Se o proxy HTTPS, o certificado local confiável ou as configurações explícitas de origem não estiverem corretos, o fluxo deve falhar de forma visível, **sem desabilitar Secure ou as verificações CSRF/Origin**.
@@ -68,6 +68,14 @@ O teste `scripts/e2e_two_tabs.py` cria duas páginas no **mesmo contexto do Chro
 Esse teste demonstra que a validação CSRF falha de forma restritiva e que o logout da aba com estado antigo não encerra a sessão da outra aba. **Não demonstra coordenação de refresh simultâneo**, tolerância a resposta perdida, suporte a vários navegadores nem solução para logout global. Em particular, a aba antiga apresenta logout local mesmo quando o servidor recusa a revogação. Essas limitações continuam abertas na [Issue #40](https://github.com/danmaciel/monorepo_sistema_todo_com_microservices/issues/40).
 
 O E2E roda apenas com credenciais temporárias, certificado HTTPS descartável e perfil isolado; nunca imprime valores de cookie, JWT ou CSRF. Não execute este cenário contra contas reais.
+
+## Web Locks — incremento de coordenação do refresh
+
+O módulo `packages/web-app/src/utils/refreshLock.js` usa `navigator.locks.request` com lock exclusivo `todo-browser-refresh`. O cliente só executa a leitura atual do CSRF e o POST de rotação **enquanto detém o lock**, evitando que uma aba use um CSRF lido antes da rotação por outra. Nenhum access JWT, CSRF ou cookie é trocado por BroadcastChannel, localStorage ou sessionStorage.
+
+O teste unitário `tests/refreshLock.test.js` verifica exclusividade assíncrona e ausência de fallback inseguro. O cenário `scripts/e2e_web_locks.py` verifica que duas abas conseguem recuperar sessões no Chromium usando o mesmo perfil/cookie e que o reload posterior também renova. A sequência de navegações permite sobreposição, mas **não garante** duas requisições simultâneas em todas as execuções de CI. Isso não é prova de correção para todas as corridas, nem substitui testes de falha de rede, recuperação pós-COMMIT ou compatibilidade entre navegadores.
+
+O teste legado `scripts/e2e_two_tabs.py` permanece válido: o logout da aba com CSRF antigo ainda pode receber 403 e limpar apenas o estado local. Não confundir coordenação de **refresh** com coordenação de **logout**. O fluxo de sessão continua opt-in; o frontend Docker padrão mantém o comportamento legado.
 
 ## Evidência automatizada de navegador
 

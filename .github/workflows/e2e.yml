@@ -73,6 +73,10 @@ jobs:
         env:
           E2E_BROWSER_ENABLED: 'true'
         run: python3 scripts/e2e_two_tabs.py
+      - name: Exercise Web Locks refresh with two Chromium tabs
+        env:
+          E2E_BROWSER_ENABLED: 'true'
+        run: python3 scripts/e2e_web_locks.py
       - name: Assert traces are exported to Zipkin
         run: python3 scripts/verify_traces.py
       - name: Show container diagnostics on failure
