@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { authService, sessionMode, sessionService } from '../services/api'
 import { isJwtActive } from '../utils/session'
+import { withRefreshLock } from '../utils/refreshLock'
 
 // One refresh attempt at a time per tab, shared by bootstrap and API requests.
 let refreshInFlight = null
@@ -41,12 +42,10 @@ export const useAuthStore = create(
         bootstrapInFlight = (async () => {
           set({ isBootstrapping: true })
           try {
-            const response = await sessionService.bootstrap()
-            if (version !== sessionVersion) return
-            const csrf = response.headers?.['x-csrf-token']
-            if (typeof csrf !== 'string' || !csrf) throw new Error('CSRF indisponível')
-            set({ csrf })
+            // refreshSession obtains the current CSRF and rotates under one
+            // cross-tab lock. Doing bootstrap before locking is a TOCTOU race.
             await get().refreshSession()
+            if (version !== sessionVersion) return
           } catch {
             if (version === sessionVersion) set(emptySession)
           } finally {
@@ -60,15 +59,22 @@ export const useAuthStore = create(
       refreshSession: async () => {
         if (!sessionMode) return null
         if (refreshInFlight) return refreshInFlight
-        const csrf = get().csrf
-        if (!csrf) return null
         const version = sessionVersion
 
         refreshInFlight = (async () => {
           try {
-            const response = await sessionService.refresh(csrf)
-            if (version !== sessionVersion) return null
-            return applySessionResponse(response, set)
+            return await withRefreshLock(async () => {
+              // Shared cookie can rotate in a different tab. Bootstrap again
+              // after acquiring the lock instead of using a stale in-memory CSRF.
+              if (version !== sessionVersion) return null
+              const bootstrap = await sessionService.bootstrap()
+              const csrf = bootstrap.headers?.['x-csrf-token']
+              if (typeof csrf !== 'string' || !csrf) throw new Error('CSRF indisponível')
+              if (version !== sessionVersion) return null
+              const response = await sessionService.refresh(csrf)
+              if (version !== sessionVersion) return null
+              return applySessionResponse(response, set)
+            })
           } catch {
             if (version === sessionVersion) set(emptySession)
             return null
