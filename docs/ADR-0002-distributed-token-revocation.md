@@ -1,5 +1,8 @@
 # ADR-0002 — Autenticação e revogação entre microsserviços
 
+> **Atualização de implementação (novembro de 2026).** Este ADR registra a evolução histórica das etapas de autenticação. As seções de progresso abaixo descrevem o estado **na data de cada etapa** e não a situação atual. Hoje o modo HTTPS opt-in oferece login, refresh rotativo em PostgreSQL, logout, cookie HttpOnly/Secure/SameSite, Origin/CSRF e coordenação entre abas via Web Locks (PRs #36–#43). JWTs de acesso seguem com **24 horas por padrão** e não têm revogação imediata no Todo Service. O fluxo legado continua ativo; perda da resposta após COMMIT, mudança de TTL dos clientes legados e revogação distribuída continuam pendentes. Consulte [estado atual e execução](BROWSER_SESSION_LOCAL_DEMO.md). A decisão de revogação distribuída permanece em avaliação.
+
+
 **Status:** Proposto para implementação incremental; nenhuma política de revogação distribuída foi implantada.
 
 ## Contexto observado no código
@@ -55,7 +58,7 @@ sequenceDiagram
     Note over B,T: Access JWT anterior pode valer até expirar
 ```
 
-O desenho não afirma que um cookie, endpoint de refresh ou armazenamento de sessões já exista no sistema atual.
+O desenho retrata o fluxo desejado com access JWT curto; o fluxo opcional já implementa cookie, endpoint HTTP e persistência de sessão, mas ainda **não adota access JWT curto por padrão**.
 
 ## Critérios de aceitação para a implementação
 
