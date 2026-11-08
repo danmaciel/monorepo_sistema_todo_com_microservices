@@ -34,6 +34,19 @@ class JwtTokenProviderContractTest {
     }
 
     @Test
+    void issuedTokenRespectsConfiguredExpirationInMilliseconds() {
+        JwtTokenProvider shortLivedProvider = new JwtTokenProvider(SECRET, 90_000L);
+        String token = shortLivedProvider.generateToken(UUID.randomUUID(), "tester");
+        var claims = Jwts.parser()
+                .verifyWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8)))
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
+
+        assertEquals(90_000L, claims.getExpiration().getTime() - claims.getIssuedAt().getTime());
+    }
+
+    @Test
     void rejectsExpiredSignedToken() {
         String expired = Jwts.builder()
                 .subject(UUID.randomUUID().toString())
