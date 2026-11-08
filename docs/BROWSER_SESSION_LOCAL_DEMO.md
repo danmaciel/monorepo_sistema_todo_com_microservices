@@ -61,6 +61,14 @@ Ao mudar entre os modos, limpe no navegador os dados antigos do aplicativo (`aut
 - Se o proxy HTTPS, o certificado local confiável ou as configurações explícitas de origem não estiverem corretos, o fluxo deve falhar de forma visível, **sem desabilitar Secure ou as verificações CSRF/Origin**.
 - O cadastro continua usando a API legada para criar a conta e, no novo modo, realiza login de sessão em seguida. A resposta JWT legada do cadastro é descartada pelo frontend.
 
+## Comportamento entre duas abas — baseline de regressão
+
+O teste `scripts/e2e_two_tabs.py` cria duas páginas no **mesmo contexto do Chromium**, compartilhando o cookie HttpOnly mas não o estado JavaScript. A primeira aba faz login; a segunda carrega a aplicação, obtém seu CSRF e rotaciona a sessão. Quando a primeira tenta sair usando seu **CSRF antigo**, o servidor deve rejeitar a operação com **403** antes de revogar a família. A segunda aba deve conseguir renovar a sessão normalmente.
+
+Esse teste demonstra que a validação CSRF falha de forma restritiva e que o logout da aba com estado antigo não encerra a sessão da outra aba. **Não demonstra coordenação de refresh simultâneo**, tolerância a resposta perdida, suporte a vários navegadores nem solução para logout global. Em particular, a aba antiga apresenta logout local mesmo quando o servidor recusa a revogação. Essas limitações continuam abertas na [Issue #40](https://github.com/danmaciel/monorepo_sistema_todo_com_microservices/issues/40).
+
+O E2E roda apenas com credenciais temporárias, certificado HTTPS descartável e perfil isolado; nunca imprime valores de cookie, JWT ou CSRF. Não execute este cenário contra contas reais.
+
 ## Evidência automatizada de navegador
 
 O workflow `.github/workflows/e2e.yml` instala Playwright Python e Chromium, inicia o frontend Vite com `VITE_SESSION_AUTH=true` e um certificado HTTPS descartável, e executa `scripts/e2e_browser.py`. O teste utiliza um perfil de navegador vazio e uma conta temporária. Ignora a confiança no certificado **somente no contexto de teste**, mantendo HTTPS e o atributo `Secure`; essa configuração não deve ser usada em navegação real.
