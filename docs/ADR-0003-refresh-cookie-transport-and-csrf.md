@@ -1,10 +1,10 @@
 # ADR-0003 — Transporte de refresh session por cookie e defesa CSRF
 
-**Status: proposta; nenhuma autenticação por cookie está ativa.**
+**Status: implementação opt-in para desenvolvimento e CI, desabilitada por padrão.** A decisão sobre implantação de produção permanece aberta. Este documento inclui registros históricos: frases como “não implementado” em seções abaixo descrevem etapas anteriores, e **não** o estado atual.
 
 ## Contexto verificável
 
-O User Service emite JWT Bearer de 24 horas para login/cadastro. O frontend ainda armazena o access JWT em localStorage. PostgreSQL possui emissão, rotação e revogação internas de refresh sessions, **não conectadas ao login HTTP**. O Gateway e o User Service estão com CORS `allowCredentials: false`. A configuração de Spring Security no User Service ainda desabilita CSRF globalmente, pois não usa cookies como credencial de sessão.
+O login/cadastro legado emite JWT Bearer de 24 horas por padrão, e o frontend padrão ainda utiliza `localStorage`. **Opcionalmente**, o User Service disponibiliza login, bootstrap CSRF, refresh rotativo e logout, com cookie HttpOnly/Secure/SameSite e controle explícito de Origin/CSRF. O React executado em HTTPS usa proxy de mesma origem para o Gateway e mantém access JWT/CSRF apenas em memória. O controle de refresh/logout entre abas usa Web Locks. O modo opcional permanece desabilitado no Docker padrão. Consulte [execução e testes](BROWSER_SESSION_LOCAL_DEMO.md).
 
 O objetivo futuro é usar access token de vida curta em memória no frontend e refresh token opaco em cookie HttpOnly. Essa migração não será ativada por uma mudança isolada de CORS ou por adicionar um cookie ao login.
 
@@ -31,16 +31,17 @@ A remoção usa o mesmo nome, caminho, atributos e `Max-Age=0`. A classe não re
 3. Atributos de cookie são emitidos pelo User Service, mas vistos pelo navegador em **`/api/users/...` na origem pública do Gateway**. O caminho deve ser escolhido na perspectiva do navegador, não da rota interna `/users/...` após `StripPrefix`.
 4. Não expor o refresh token em JSON, cabeçalho Authorization, URL, logs, traces ou armazenamento acessível a scripts. Access JWT continua sendo Bearer na API de tarefas.
 
-## Contrato HTTP candidato (não implementado)
+## Contrato HTTP (fluxo legado e endpoints opt-in)
 
 | Rota pública | Método | Entrada | Saída esperada |
 | --- | --- | --- | --- |
-| `/api/users/login` | POST | username e password | Contrato legado inalterado: access JWT e usuário, sem cookie de refresh |\n| `/api/users/session/login` | POST | username, password e Origin autorizado | Login opt-in: access JWT + usuário + Set-Cookie de refresh + X-CSRF-Token |
+| `/api/users/login` | POST | username e password | Contrato legado inalterado: access JWT e usuário, sem cookie de refresh |
+| `/api/users/session/login` | POST | username, password e Origin autorizado | Login opt-in: access JWT + usuário + Set-Cookie de refresh + X-CSRF-Token |
 | `/api/users/refresh` | POST | cookie refresh + Origin e proteção CSRF | Handler opt-in: novo access JWT e cookie/CSRF rotacionados; falha 401 limpa o cookie |
 | `/api/users/logout` | POST | cookie refresh + Origin + CSRF | Handler implementado, mas inacessível por padrão; com a fronteira explicitamente habilitada, revoga a família e retorna 204 com cookie expirado |
 | `/api/users/me` | GET | Bearer JWT | Perfil do próprio usuário |
 
-O cadastro exige uma decisão explícita: também criar refresh session após registro ou solicitar login. O contrato atual não muda nesta etapa.
+No modo opt-in, o frontend registra a conta pelo contrato legado e, em seguida, realiza login de sessão; o JWT legado retornado pelo cadastro não é utilizado nesse modo.
 
 ## Proteção CSRF exigida antes de ativar cookies
 
