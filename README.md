@@ -70,7 +70,7 @@ O Docker Compose publica essas bases apenas em `127.0.0.1:5432` e `127.0.0.1:543
 
 Antes de iniciar com Docker Compose, copie `.env.example` para `.env` e preencha `USER_DB_PASSWORD`, `TODO_DB_PASSWORD` e `JWT_SECRET` com valores fortes e distintos (não versione o `.env`). Para executar os serviços Java fora do Docker, configure `DB_PASSWORD`, `DB_USERNAME`, `DB_URL` e `JWT_SECRET` no processo de cada serviço: User Service usa `jdbc:postgresql://localhost:5432/usersdb` (`users_app`), Todo Service usa `jdbc:postgresql://localhost:5433/todosdb` (`todos_app`). Credenciais de demonstração não são apropriadas para produção.
 
-**Importante:** os serviços Java precisam compartilhar o segredo JWT. No ambiente Docker o Compose fornece essas variáveis; no ambiente local o segredo e a senha não são mais embutidos nos arquivos `application.yml`.
+**Importante:** no modo HS256 legado, os dois serviços precisam compartilhar `JWT_SECRET`. No modo RS256 opcional, o User Service recebe o par privado/público e o Todo Service recebe **somente a chave pública**; não compartilhe a chave privada. Consulte [configuração e limitações dos JWTs](docs/JWT_SECURITY.md).
 
 ## 🚀 Como Executar
 
@@ -204,7 +204,7 @@ npm run clean
 
 ## 🔐 Autenticação
 
-- JWT (JSON Web Tokens)
+- JWT (JSON Web Tokens): HMAC legado por padrão ou **RS256 opcional**, com assinatura privada no User Service e validação pública no Todo Service.
 - **Modo padrão:** JWT Bearer no cabeçalho `Authorization`, com expiração de 24 horas e persistência do frontend legado em `localStorage`.
 - **Modo opcional de demonstração HTTPS:** login de sessão, refresh rotativo persistido por fingerprint SHA-256 no PostgreSQL, cookie `HttpOnly; Secure; SameSite=Strict`, validação de Origin/CSRF, access JWT em memória e coordenação de refresh/logout entre abas com Web Locks.
 - O modo opcional é **desabilitado por padrão**; consulte [passo a passo e limites](docs/BROWSER_SESSION_LOCAL_DEMO.md). O User Service permite configurar o TTL com `JWT_ACCESS_EXPIRATION_MS` (24 horas por padrão). Não reduzir o prazo no cliente legado sem migração de sessão.
@@ -245,9 +245,21 @@ npm run dev --workspace=web-app
 
 ## 🧪 Qualidade, decisões e limites
 
-A pipeline [Services CI](.github/workflows/ci.yml) executa verificações dos serviços Java e do frontend. Além dos testes unitários de autenticação e propriedade de tarefas, a pipeline [Docker Compose E2E](.github/workflows/e2e.yml) já testa o Gateway, PostgreSQL e serviços reais: cadastro, login, criação e edição de tarefas, isolamento entre usuários e exclusão. Ela também verifica traces exportados ao Zipkin.
+A pipeline [Services CI](.github/workflows/ci.yml) executa verificações dos serviços Java e do frontend. A pipeline [Docker Compose E2E](.github/workflows/e2e.yml) utiliza **RS256 e access JWT de 15 minutos em ambiente descartável**, validando cadastro, login, refresh, rejeição de HMAC no modo RSA, CRUD e isolamento de tarefas, navegador, tracing no Zipkin e continuidade parcial do Todo Service durante uma interrupção controlada do User Service. O modo local padrão continua HMAC e access JWT de 24 horas.
 
 O gateway utiliza rotas estáticas; o Eureka registra os serviços, mas não é usado como balanceador dinâmico pelas rotas atuais. User Service e Todo Service agora usam bancos PostgreSQL **separados**, com volumes e credenciais independentes; o Redis do Compose ainda não é usado como cache pela aplicação. Essas escolhas e os próximos passos estão explicados em [Arquitetura e decisões técnicas](docs/ARCHITECTURE.md).
+
+## O que o projeto comprova — e o que não comprova
+
+| Área | Evidência automatizada | Limitação importante |
+| --- | --- | --- |
+| Autenticação | RS256 e HMAC legado isoladamente, validação de issuer/audience e expiração | Sem rotação automática de chaves ou `kid` |
+| Sessões | Refresh rotativo, controle de replay e fluxos HTTP/browser opt-in | Logout não revoga imediatamente access JWT no Todo Service |
+| Persistência | Flyway + validação Hibernate e bancos PostgreSQL separados no Compose | Sem migração automática de volumes antigos |
+| Resiliência | CRUD de tarefas com User Service interrompido, com JWT já emitido | Não demonstra alta disponibilidade, carga ou recuperação de desastre |
+| Observabilidade | Exportação de spans para Zipkin no E2E | Sem operação de produção, métricas/SLOs ou alertas completos |
+
+Leia [arquitetura e trade-offs](docs/ARCHITECTURE.md), [segurança JWT](docs/JWT_SECURITY.md) e [ADR de revogação](docs/ADR-0002-distributed-token-revocation.md). Este é um projeto demonstrativo: os resultados dos testes não equivalem a uma auditoria de segurança ou certificação de produção.
 
 ## 🔁 Resiliência entre serviços
 
