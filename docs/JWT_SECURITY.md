@@ -35,6 +35,8 @@ export JWT_ACCESS_EXPIRATION_MS=900000  # 15 minutos
 
 A mudança afeta **somente os tokens emitidos depois que o User Service for reiniciado com a nova configuração**; tokens anteriores continuam válidos até seu próprio `exp`. O Todo Service valida a expiração presente no JWT, sem precisar receber essa variável.
 
+No Docker Compose, o perfil `application-docker.yml` do User Service também respeita `JWT_ACCESS_EXPIRATION_MS` (antes era fixado em 24 horas nesse perfil). O workflow Docker Compose E2E inicia o **modo opt-in de refresh** com `JWT_ACCESS_EXPIRATION_MS=900000`, verifica que JWTs emitidos por cadastro, login, login de sessão e refresh têm validade de 15 minutos e exercita os fluxos normais de autenticação e de navegador. Isso testa a configuração; o padrão do Compose continua em 24 horas e os access tokens não são revogados imediatamente após logout.
+
 **Não reduza o TTL no fluxo legado isoladamente.** O cliente padrão mantém tokens bearer no `localStorage` e não utiliza a renovação opcional; reduzir o prazo sem migrar esse cliente provoca expirações frequentes e perda de sessão. Validar o modo opt-in, o tratamento de falhas, as abas concorrentes e um plano de rollout/rollback é requisito anterior à adoção de uma duração menor. Este ajuste é apenas de configurabilidade, não uma mudança de política.
 
 ## Evidências automatizadas
