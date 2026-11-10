@@ -93,7 +93,7 @@ public class JwtTokenProvider {
                 .expiration(expires);
         return rsaPrivateKey != null
                 ? builder.signWith(rsaPrivateKey, Jwts.SIG.RS256).compact()
-                : builder.signWith(hmacKey, Jwts.SIG.HS256).compact();
+                : builder.signWith(hmacKey).compact();
     }
 
     public String getUsernameFromToken(String token) {
@@ -109,8 +109,12 @@ public class JwtTokenProvider {
                 ? Jwts.parser().verifyWith(rsaPublicKey).build().parseSignedClaims(token)
                 : Jwts.parser().verifyWith(hmacKey).build().parseSignedClaims(token);
         // Pin the signature algorithm; never trust the algorithm named by the client.
-        String expected = rsaPublicKey != null ? "RS256" : "HS256";
-        if (!expected.equals(parsed.getHeader().getAlgorithm())) {
+        String algorithm = parsed.getHeader().getAlgorithm();
+        boolean permitted = rsaPublicKey != null
+                ? "RS256".equals(algorithm)
+                : ("HS256".equals(algorithm) || "HS384".equals(algorithm)
+                        || "HS512".equals(algorithm));
+        if (!permitted) {
             throw new UnsupportedJwtException("Unexpected JWT signature algorithm");
         }
         return parsed;
