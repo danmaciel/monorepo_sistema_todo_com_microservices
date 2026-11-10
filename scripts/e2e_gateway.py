@@ -61,6 +61,7 @@ def check_refresh_http_scenario(username, password):
                                         data={"username": username, "password": password})
     expect(200, status, "opt-in session login")
     assert auth and auth.get("token"), "session login must provide access JWT"
+    assert_expected_access_ttl(auth["token"], "session login")
     previous_cookie = refresh_cookie_from(headers)
     previous_csrf = headers.get("X-CSRF-Token")
     assert previous_csrf and previous_cookie.split("=", 1)[1] not in json.dumps(auth), (
@@ -91,6 +92,7 @@ def check_refresh_http_scenario(username, password):
                                              cookie=previous_cookie, csrf=previous_csrf)
     expect(200, status, "rotate refresh session")
     assert refreshed and refreshed.get("token"), "rotation must provide new access JWT"
+    assert_expected_access_ttl(refreshed["token"], "refresh rotation")
     successor_cookie = refresh_cookie_from(headers)
     successor_csrf = headers.get("X-CSRF-Token")
     assert successor_cookie != previous_cookie, "rotation must replace cookie"
@@ -168,6 +170,27 @@ def check_gateway_cors():
             assert exposed_origin != origin, "Gateway reflected a disallowed origin"
 
 
+def assert_expected_access_ttl(token, context):
+    """Check issued JWT lifetime without treating client-side decoding as validation."""
+    expected = os.environ.get("E2E_EXPECT_ACCESS_TTL_SECONDS")
+    if expected is None:
+        return
+    parts = token.split(".")
+    assert len(parts) == 3, context + ": malformed access token"
+    payload = parts[1]
+    payload += "=" * (-len(payload) % 4)
+    claims = json.loads(base64.urlsafe_b64decode(payload))
+    issued = claims.get("iat")
+    expires = claims.get("exp")
+    assert isinstance(issued, int) and isinstance(expires, int), (
+        context + ": missing JWT timestamps"
+    )
+    delta = expires - issued
+    assert abs(delta - int(expected)) <= 1, (
+        context + ": expected access token TTL " + expected + " seconds, got " + str(delta)
+    )
+
+
 def signed_test_token(user_id, *, expired=False, issuer=None, audience=None):
     """Sign a JWT with disposable CI credentials; never print it."""
     secret = os.environ.get("JWT_SECRET", "")
@@ -230,6 +253,7 @@ def main():
         })
         expect(201, status, f"register user {index}")
         assert registered and registered.get("token"), "register must return JWT"
+        assert_expected_access_ttl(registered["token"], "register")
         assert registered.get("user", {}).get("id"), "register must return user ID"
         user_ids.append(registered["user"]["id"])
         status, logged = call("POST", "/api/users/login", {
@@ -238,6 +262,7 @@ def main():
         })
         expect(200, status, f"login user {index}")
         assert logged and logged.get("token"), "login must return JWT"
+        assert_expected_access_ttl(logged["token"], "legacy bearer login")
         users.append(logged["token"])
 
     if os.environ.get("E2E_REFRESH_ENABLED") == "true":
