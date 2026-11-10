@@ -4,21 +4,38 @@ services:
   # ============================================
   # DATABASES
   # ============================================
-  postgres:
+  user-db:
     image: postgres:15-alpine
-    container_name: todo-postgres
     environment:
-      POSTGRES_DB: tododb
-      POSTGRES_USER: todouser
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in your environment}
+      POSTGRES_DB: usersdb
+      POSTGRES_USER: users_app
+      POSTGRES_PASSWORD: ${USER_DB_PASSWORD:?Set USER_DB_PASSWORD in your environment}
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - user_postgres_data:/var/lib/postgresql/data
     networks:
       - todo-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U todouser -d tododb"]
+      test: ["CMD-SHELL", "pg_isready -U users_app -d usersdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  todo-db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: todosdb
+      POSTGRES_USER: todos_app
+      POSTGRES_PASSWORD: ${TODO_DB_PASSWORD:?Set TODO_DB_PASSWORD in your environment}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - todo_postgres_data:/var/lib/postgresql/data
+    networks:
+      - todo-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U todos_app -d todosdb"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -60,7 +77,7 @@ services:
     networks:
       - todo-network
     depends_on:
-      - postgres
+      - user-db
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8761/actuator/health"]
       interval: 10s
@@ -99,22 +116,22 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: docker
       ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/tododb
-      SPRING_DATASOURCE_USERNAME: todouser
+      SPRING_DATASOURCE_URL: jdbc:postgresql://user-db:5432/usersdb
+      SPRING_DATASOURCE_USERNAME: users_app
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in your environment}
       JWT_ACCEPT_LEGACY_WITHOUT_CLAIMS: ${JWT_ACCEPT_LEGACY_WITHOUT_CLAIMS:-true}
       JWT_ACCESS_EXPIRATION_MS: ${JWT_ACCESS_EXPIRATION_MS:-86400000}
       AUTH_REFRESH_HTTP_ENABLED: ${AUTH_REFRESH_HTTP_ENABLED:-false}
       AUTH_REFRESH_ALLOWED_ORIGINS: ${AUTH_REFRESH_ALLOWED_ORIGINS:-}
       AUTH_REFRESH_CSRF_KEY_BASE64: ${AUTH_REFRESH_CSRF_KEY_BASE64:-}
-      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in your environment}
+      SPRING_DATASOURCE_PASSWORD: ${USER_DB_PASSWORD:?Set USER_DB_PASSWORD in your environment}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka/
     ports:
       - "127.0.0.1:8081:8081"
     networks:
       - todo-network
     depends_on:
-      postgres:
+      user-db:
         condition: service_healthy
       eureka:
         condition: service_healthy
@@ -132,18 +149,18 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: docker
       ZIPKIN_ENDPOINT: http://zipkin:9411/api/v2/spans
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/tododb
-      SPRING_DATASOURCE_USERNAME: todouser
+      SPRING_DATASOURCE_URL: jdbc:postgresql://todo-db:5432/todosdb
+      SPRING_DATASOURCE_USERNAME: todos_app
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in your environment}
       JWT_ACCEPT_LEGACY_WITHOUT_CLAIMS: ${JWT_ACCEPT_LEGACY_WITHOUT_CLAIMS:-true}
-      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in your environment}
+      SPRING_DATASOURCE_PASSWORD: ${TODO_DB_PASSWORD:?Set TODO_DB_PASSWORD in your environment}
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka:8761/eureka/
     ports:
       - "127.0.0.1:8082:8082"
     networks:
       - todo-network
     depends_on:
-      postgres:
+      todo-db:
         condition: service_healthy
       eureka:
         condition: service_healthy
@@ -172,4 +189,5 @@ networks:
     driver: bridge
 
 volumes:
-  postgres_data:
+  user_postgres_data:
+  todo_postgres_data:
