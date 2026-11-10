@@ -8,6 +8,28 @@ O User Service consulta o cadastro em requisições autenticadas e recusa contas
 
 A validação de assinatura e expiração **não equivale** a revogação. `iss` (emissor) e `aud` (destinatário) são emitidos e conferidos quando presentes. Exigi-los para todos os tokens depende de desativar o modo legado em ambos os serviços após expirar o último JWT antigo. O modo opcional de sessão web já expõe login, refresh e logout por HTTP com rotação e proteção de Origin/CSRF; ele não oferece revogação imediata dos access JWTs em outros serviços. Consulte [Demonstração local de sessão web](BROWSER_SESSION_LOCAL_DEMO.md). O JWT é assinado, **não criptografado**: dados sensíveis não devem ser incluídos em suas claims.
 
+## RS256 opcional: separação entre emissor e verificador
+
+Além do HS256 legado, os dois serviços podem operar em modo **RS256** configurado explicitamente por variáveis de ambiente:
+
+- User Service recebe `JWT_RSA_PRIVATE_KEY_BASE64` (PKCS#8 DER) e `JWT_RSA_PUBLIC_KEY_BASE64` (X.509 SubjectPublicKeyInfo DER).
+- Todo Service recebe **somente** `JWT_RSA_PUBLIC_KEY_BASE64`. A chave privada não é fornecida ao Todo Service.
+- Se o modo RS256 está configurado, os validadores exigem `RS256` e não aceitam um JWT HS256 como fallback, mesmo que a variável `JWT_SECRET` continue presente.
+- Sem as chaves RSA, ambos mantêm o modo HS256 anterior, exigindo `JWT_SECRET` de pelo menos 32 bytes. Chaves malformadas impedem a inicialização; o User Service exige as duas chaves quando RSA é habilitado.
+- Os testes do CI criam um par de chaves descartável a cada execução, sem publicar a chave privada. O workflow E2E valida login, refresh, tarefas e indisponibilidade do User Service no modo RS256.
+
+Exemplo de geração local de chaves, para um **laboratório novo**:
+
+```bash
+umask 077
+openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/todo-access-private.pem
+export JWT_RSA_PRIVATE_KEY_BASE64="$(openssl pkcs8 -topk8 -nocrypt -in /tmp/todo-access-private.pem -outform DER | base64 -w0)"
+export JWT_RSA_PUBLIC_KEY_BASE64="$(openssl pkey -in /tmp/todo-access-private.pem -pubout -outform DER | base64 -w0)"
+# Não imprima as variáveis nem envie /tmp/todo-access-private.pem para Git.
+```
+
+Atenção: **não é um rollout com dupla aceitação de algoritmos**. Ativar RS256 nos dois serviços invalida tokens HS256 emitidos antes da troca. Para sistemas em uso, planeje convivência temporária segura e rotação por `kid` em uma etapa separada, ou só faça a troca após a expiração dos access tokens anteriores. Rotação de chaves e revogação imediata distribuída **não estão implementadas**. O serviço de tarefas segue independente do User Service enquanto o JWT RS256 ainda for válido. Nenhuma configuração RS256 altera automaticamente a duração padrão de 24 horas.
+
 ## Fluxo atual
 
 ```mermaid
