@@ -2,7 +2,7 @@
 
 ## Escopo implementado
 
-O User Service autentica credenciais e emite JWTs assinados com HS256. Os novos tokens contêm o UUID do usuário (`sub`), o nome de usuário, a expiração (24 horas por padrão, configurável pelo User Service), o emissor `iss=todo-user-service` e a audiência `aud=todo-api`. User Service e Todo Service validam a assinatura, rejeitam tokens expirados e exigem as claims `exp` e `sub` (UUID válido). O Todo Service usa esse `sub` para aplicar as regras de propriedade das tarefas. **Os dois validadores agora rejeitam `iss` ou `aud` incompatíveis** com o contrato `todo-user-service` / `todo-api`. Durante a transição, tokens legados que não possuem *nenhuma das duas claims* continuam aceitos se estiverem corretamente assinados e não expirados. Tokens que apresentam somente uma das claims são rejeitados. Essa compatibilidade é controlada por `JWT_ACCEPT_LEGACY_WITHOUT_CLAIMS` (padrão `true`) em **ambos** os serviços; com `false`, `iss` e `aud` passam a ser obrigatórios. Isso não implementa revogação ou gestão de sessões.
+O User Service autentica credenciais e emite JWTs assinados no modo HMAC legado (HS256/HS384/HS512, conforme a força da chave) ou, opcionalmente, em RS256. Os novos tokens contêm o UUID do usuário (`sub`), o nome de usuário, a expiração (24 horas por padrão, configurável pelo User Service), o emissor `iss=todo-user-service` e a audiência `aud=todo-api`. User Service e Todo Service validam a assinatura, rejeitam tokens expirados e exigem as claims `exp` e `sub` (UUID válido). O Todo Service usa esse `sub` para aplicar as regras de propriedade das tarefas. **Os dois validadores agora rejeitam `iss` ou `aud` incompatíveis** com o contrato `todo-user-service` / `todo-api`. Durante a transição, tokens legados que não possuem *nenhuma das duas claims* continuam aceitos se estiverem corretamente assinados e não expirados. Tokens que apresentam somente uma das claims são rejeitados. Essa compatibilidade é controlada por `JWT_ACCEPT_LEGACY_WITHOUT_CLAIMS` (padrão `true`) em **ambos** os serviços; com `false`, `iss` e `aud` passam a ser obrigatórios. Isso não implementa revogação ou gestão de sessões.
 
 O User Service consulta o cadastro em requisições autenticadas e recusa contas desativadas ou excluídas. O Todo Service **não** consulta o estado cadastral a cada requisição: um JWT ainda válido pode continuar autorizando tarefas após a desativação da conta.
 
@@ -38,14 +38,14 @@ sequenceDiagram
     participant U as User Service
     participant T as Todo Service
     C->>U: POST /users/login
-    U-->>C: JWT HS256 (sub, username, exp, iss, aud)
+    U-->>C: JWT HMAC legado ou RS256 opcional (sub, username, exp, iss, aud)
     C->>T: Bearer JWT /todos
     T->>T: Validar assinatura e expiração
     T->>T: Autorizar acesso às tarefas do sub
     T-->>C: Resultado
 ```
 
-O segredo simétrico compartilhado simplifica o laboratório, mas qualquer serviço que possua esse segredo também tem capacidade de emitir assinaturas. A adoção futura de chave assimétrica, rotação e validação explícita de emissor e destinatário exige migração compatível e testes em ambos os serviços.
+No modo HMAC, o segredo simétrico compartilhado simplifica o laboratório, mas qualquer serviço que o conheça também pode emitir tokens. O modo RS256 opcional já separa assinatura e verificação. **Rotação de chaves, `kid`/JWKS e revogação imediata ainda não existem**, e o modo RS256 não aceita HMAC simultaneamente. Os validadores conferem emissor e audiência conforme a política configurada.
 
 ## Duração configurável do access JWT
 
@@ -66,6 +66,7 @@ No Docker Compose, o perfil `application-docker.yml` do User Service também res
 | Comportamento | Onde verificar |
 | --- | --- |
 | Emissão de JWT, TTL configurado e extração da identidade | `user-service/.../JwtTokenProviderContractTest.java` |
+| Assinatura RS256, chave errada, configuração inválida e rejeição de HMAC no modo RSA | `JwtTokenProviderContractTest` nos dois serviços; `scripts/e2e_gateway.py` |
 | Rejeição de assinatura incorreta, token expirado e emissor/audiência incorretos | `JwtTokenProviderContractTest` nos dois serviços |
 | Rejeição de conta desativada/excluída no User Service | `JwtAuthenticationFilterTest` |
 | Expiração de JWT assinado verificada via Gateway | `scripts/e2e_gateway.py` |
@@ -80,7 +81,7 @@ mvn -f packages/todo-service/pom.xml -Dtest=JwtTokenProviderContractTest test
 
 Os testes utilizam credenciais fictícias. A aprovação do CI demonstra os cenários cobertos, não certifica segurança absoluta ou validação em produção.
 
-O workflow [Docker Compose E2E](../.github/workflows/e2e.yml) executa os dois serviços em **modo estrito apenas no ambiente descartável de CI**, usando `JWT_ACCEPT_LEGACY_WITHOUT_CLAIMS=false`, e verifica a rejeição de JWTs corretamente assinados sem `iss`/`aud`. O Docker Compose local preserva o padrão `true` para compatibilidade. Essa verificação não significa que o modo estrito tenha sido ativado em instalações existentes.
+O workflow [Docker Compose E2E](../.github/workflows/e2e.yml) executa os dois serviços em **RS256 e modo estrito apenas no ambiente descartável de CI**, usando `JWT_ACCEPT_LEGACY_WITHOUT_CLAIMS=false`, e verifica a rejeição de JWTs HMAC e de tokens incompatíveis com a política de emissor/audiência. O Docker Compose local preserva o padrão `true` para compatibilidade. Essa verificação não significa que o modo estrito tenha sido ativado em instalações existentes.
 
 ## Limitações e decisões em aberto
 
