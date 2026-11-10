@@ -1,14 +1,27 @@
 # ADR-0002 — Autenticação e revogação entre microsserviços
 
-> **Atualização de implementação (novembro de 2026).** Este ADR registra a evolução histórica das etapas de autenticação. As seções de progresso abaixo descrevem o estado **na data de cada etapa** e não a situação atual. Hoje o modo HTTPS opt-in oferece login, refresh rotativo em PostgreSQL, logout, cookie HttpOnly/Secure/SameSite, Origin/CSRF e coordenação entre abas via Web Locks (PRs #36–#43). JWTs de acesso seguem com **24 horas por padrão** e não têm revogação imediata no Todo Service. O fluxo legado continua ativo; perda da resposta após COMMIT, mudança de TTL dos clientes legados e revogação distribuída continuam pendentes. Consulte [estado atual e execução](BROWSER_SESSION_LOCAL_DEMO.md). A decisão de revogação distribuída permanece em avaliação.
-
+> **Estado atual (novembro de 2026).** Este ADR preserva as etapas históricas abaixo; cada seção de progresso descreve o estado **na época** e não deve ser lida como diagnóstico atual. O modo HTTPS opt-in já oferece login, refresh rotativo persistido em PostgreSQL, logout da família de refresh, cookie seguro, verificação Origin/CSRF e coordenação entre abas. O User Service também emite JWTs RS256 no modo opcional (PR #51), validados somente com chave pública no Todo Service. O access JWT permanece com **24 horas por padrão**, embora 15 minutos sejam testados no CI em modo opt-in (PR #50). **Não há revogação imediata distribuída, rotação automática de chaves nem rollout por `kid`/JWKS**. O modo legado segue disponível. Consulte [sessão HTTPS](BROWSER_SESSION_LOCAL_DEMO.md) e [segurança JWT](JWT_SECURITY.md).
 
 **Status:** Proposto para implementação incremental; nenhuma política de revogação distribuída foi implantada.
 
+## Estado de implementação resumido
+
+| Item | Situação |
+| --- | --- |
+| Assinatura HMAC legada | Implementada como padrão |
+| RS256 e validação somente com chave pública no Todo Service | Implementados **por configuração opcional**, sem fallback HMAC |
+| Refresh opaco rotativo e logout da família | Implementados no fluxo HTTP opt-in; testes com PostgreSQL e browser |
+| Access JWT de curta duração | Configurável; 15 minutos exercitados no CI; **24 horas continuam padrão** |
+| Operações do Todo Service durante falha do User Service | Testadas com JWT previamente emitido |
+| Revogação imediata de access tokens nos dois serviços | **Não implementada** |
+| Rotação de chaves, `kid` e JWKS | **Não implementados** |
+
+O status **proposto** refere-se especificamente à política de revogação distribuída, não ao refresh HTTP ou ao suporte opcional a RS256 que já foram implementados. As opções e critérios abaixo são registros de decisão, não anúncios de funcionalidade pronta.
+
 ## Contexto observado no código
 
-- O **User Service** autentica credenciais, emite JWTs HS256 com expiração de **86.400.000 ms (24 horas)** e, ao receber um JWT, consulta o usuário e recusa contas excluídas/desativadas.
-- O **Todo Service** valida localmente assinatura e expiração usando o mesmo `JWT_SECRET`, sem consultar o estado da conta.
+- O **User Service** autentica credenciais e emite JWTs HMAC por padrão ou RS256 opcional, com expiração padrão de **86.400.000 ms (24 horas)**. Quando recebe um JWT de acesso, consulta o usuário e recusa contas excluídas/desativadas.
+- O **Todo Service** valida localmente assinatura e expiração: no HMAC legado usa o mesmo `JWT_SECRET`; no RS256 usa somente a chave pública. Não consulta o estado cadastral em cada requisição.
 - O browser armazena o bearer token em `localStorage`, por meio de Zustand `persist`. A verificação de `exp` no frontend é somente uma conveniência: **o servidor decide a autorização**.
 - O **logout atual** elimina o token do browser, mas não invalida cópias existentes. Uma conta desativada pode continuar acessando o Todo Service até a expiração.
 - O Redis existe no Docker Compose, mas não há evidência de uso dele como estado de sessão/revogação.
