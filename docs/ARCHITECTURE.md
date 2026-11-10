@@ -40,6 +40,14 @@ O Compose utiliza **duas instâncias PostgreSQL isoladas**: User Service é dono
 - O workflow [Docker Compose E2E](../.github/workflows/e2e.yml) executa cadastro, login, operações com tarefas, testes de autorização entre usuários e verifica a presença de spans no Zipkin.
 - Os testes Java unitários usam mocks; o E2E usa PostgreSQL real via Compose, mas isso não substitui testes de carga, resiliência ou migração. Ainda não há circuit breakers, retries controlados ou observabilidade completa de produção.
 
+## Tolerância à indisponibilidade do User Service
+
+O Todo Service valida a assinatura e as claims de access JWTs **localmente**, com o mesmo segredo configurado no User Service, e acessa apenas seu próprio banco de dados. **Não consulta o User Service a cada operação de tarefa.** Assim, operações de tarefas com JWT válido e já emitido podem continuar mesmo quando o User Service estiver fora do ar, desde que Gateway, Todo Service e banco de tarefas estejam disponíveis.
+
+O teste `scripts/e2e_user_service_outage.py`, executado pelo workflow Docker Compose E2E, registra duas contas, interrompe o User Service e verifica leitura, criação, alteração e exclusão de tarefas, incluindo a recusa de acesso cruzado. O serviço é reiniciado ao final do teste. O teste cobre uma indisponibilidade controlada, não uma falha de rede prolongada ou um cenário de carga.
+
+**Limitação de segurança:** como o Todo Service não verifica o estado atual da conta nem consulta revogação distribuída, um JWT já emitido pode continuar válido após desativação de usuário ou logout até sua expiração. O modo padrão ainda utiliza tokens de 24 horas; isso exige uma decisão explícita de segurança antes de implantação real. Não adicione retries/circuit breakers a chamadas síncronas do User Service que não existem no fluxo atual.
+
 ## Configuração segura
 
 Use `USER_DB_PASSWORD`, `TODO_DB_PASSWORD` e `JWT_SECRET` fortes e distintos para Docker. Para execução Java fora do Docker, configure separadamente `DB_PASSWORD`, `DB_URL`, `DB_USERNAME` e `JWT_SECRET` em cada serviço.
