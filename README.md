@@ -249,6 +249,10 @@ A pipeline [Services CI](.github/workflows/ci.yml) executa verificações dos se
 
 O gateway utiliza rotas estáticas; o Eureka registra os serviços, mas não é usado como balanceador dinâmico pelas rotas atuais. User Service e Todo Service agora usam bancos PostgreSQL **separados**, com volumes e credenciais independentes; o Redis do Compose ainda não é usado como cache pela aplicação. Essas escolhas e os próximos passos estão explicados em [Arquitetura e decisões técnicas](docs/ARCHITECTURE.md).
 
+## 🔁 Resiliência entre serviços
+
+O Todo Service verifica JWT localmente e mantém seu próprio PostgreSQL; após autenticação, suas operações de tarefas não dependem de uma chamada síncrona ao User Service. O workflow Docker Compose E2E inclui um teste de interrupção controlada do User Service, preservando operações de tarefa de usuários já autenticados e o isolamento por proprietário. Essa disponibilidade parcial **não** constitui garantia de alta disponibilidade ou revogação imediata de sessões. Veja [Arquitetura e decisões técnicas](docs/ARCHITECTURE.md).
+
 ## 🔎 Tracing distribuído (Docker)
 
 O Gateway, User Service e Todo Service exportam spans OpenTelemetry para um Zipkin local, acessível em `http://localhost:9411` após iniciar o Compose. A pipeline E2E confirma o recebimento de spans dos três serviços. Isso comprova emissão de traces, mas não substitui testes de carga, falha ou observabilidade de produção. Consulte [guia de tracing e limitações](docs/TRACING.md).
