@@ -185,6 +185,15 @@ def assert_expected_access_ttl(token, context):
     assert isinstance(issued, int) and isinstance(expires, int), (
         context + ": missing JWT timestamps"
     )
+    expected_algorithm = os.environ.get("E2E_EXPECT_ACCESS_ALG")
+    if expected_algorithm:
+        header = parts[0]
+        header += "=" * (-len(header) % 4)
+        algorithm = json.loads(base64.urlsafe_b64decode(header)).get("alg")
+        assert algorithm == expected_algorithm, (
+            context + ": expected access JWT algorithm " + expected_algorithm +
+            ", got " + str(algorithm)
+        )
     delta = expires - issued
     assert abs(delta - int(expected)) <= 1, (
         context + ": expected access token TTL " + expected + " seconds, got " + str(delta)
@@ -299,6 +308,18 @@ def main():
 
     status, _ = call("GET", "/api/users/" + user_ids[0])
     assert status in (401, 403), f"anonymous profile access must be denied, got HTTP {status}"
+
+    # In RSA mode, neither service may accept a valid HS256 JWT signed with
+    # the disposable legacy secret, even if all identity claims are valid.
+    if os.environ.get("E2E_EXPECT_ACCESS_ALG") == "RS256":
+        symmetric_token = signed_test_token(
+            user_ids[0], issuer="todo-user-service", audience="todo-api"
+        )
+        for path in ("/api/users/me", "/api/todos"):
+            status, _ = call("GET", path, token=symmetric_token)
+            assert status in (401, 403), (
+                path + " accepted an HS256 token in RS256-only mode"
+            )
 
     # Both services must reject an authentically signed token whose exp is in the past.
     expired_token = signed_test_token(user_ids[0], expired=True)
