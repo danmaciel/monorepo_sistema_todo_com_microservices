@@ -12,9 +12,14 @@ spring:
     hikari:
       maximum-pool-size: 10
       minimum-idle: 5
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
+    table: todo_flyway_schema_history
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     show-sql: false
     properties:
       hibernate:

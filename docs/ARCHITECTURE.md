@@ -31,7 +31,7 @@ Os dois serviços precisam receber o mesmo segredo forte. Um segredo simétrico 
 
 ## Persistência e isolamento
 
-O Compose utiliza **um PostgreSQL compartilhado** e a mesma base `tododb` para User Service e Todo Service. Isso simplifica o ambiente, mas não oferece isolamento de dados ou autonomia de evolução do esquema entre serviços. Em um sistema evolutivo, estudar separação de schemas ou bancos por serviço, migrações controladas e contratos de integração.
+O Compose utiliza **um PostgreSQL compartilhado** e a mesma base `tododb` para User Service e Todo Service. As tabelas `users`, `todos` e `refresh_sessions` são versionadas por Flyway; cada serviço utiliza sua própria tabela de histórico de migrações, e o Hibernate valida o esquema sem alterá-lo (`ddl-auto=validate`). Isso simplifica o ambiente, mas não oferece isolamento real de dados ou credenciais entre serviços. Em um sistema evolutivo, estudar separação de schemas ou bancos por serviço, contratos de integração e rollout coordenado de migrações. Consulte [plano de migração](DATABASE_SCHEMA_MIGRATION_PLAN.md).
 
 ## Observabilidade e resiliência
 
@@ -58,7 +58,7 @@ CORS no Gateway e no Todo Service está limitado às origens locais `http://loca
 ## Próximas melhorias recomendadas
 
 - Ampliar o E2E existente com cenários de indisponibilidade, expiração de token e contratos entre serviços.
-- Separar os dados de cada serviço e estender as migrações Flyway do User Service para substituir gradualmente o `ddl-auto: update`.
+- Separar os dados e as credenciais de cada serviço e validar migrações de bancos legados antes de qualquer rollout externo.
 - Migrar segredos e configuração de produção para gerenciador de segredos.
 - Evoluir logs estruturados, métricas, alertas e correlação com os traces já implementados.
 - Revisar autenticação com chaves assimétricas e autorização baseada em políticas.
