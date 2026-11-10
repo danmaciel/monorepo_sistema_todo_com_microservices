@@ -249,6 +249,7 @@ O Gateway, User Service e Todo Service exportam spans OpenTelemetry para um Zipk
 A implementação e os limites de segurança estão registrados nos documentos abaixo. Eles descrevem o comportamento existente, os testes que o sustentam e as decisões ainda pendentes:
 
 - [Arquitetura e limitações](docs/ARCHITECTURE.md)
+- [Contrato do banco e plano de migração segura](docs/DATABASE_SCHEMA_MIGRATION_PLAN.md)
 - [Validação JWT e autorização](docs/JWT_SECURITY.md)
 - [Modelo de sessão e material de refresh token](docs/REFRESH_TOKEN_DESIGN.md)
 - [Persistência PostgreSQL, Flyway e concorrência](docs/REFRESH_TOKEN_PERSISTENCE.md)
