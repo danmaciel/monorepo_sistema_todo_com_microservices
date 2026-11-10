@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.nio.charset.StandardCharsets;
+import java.security.KeyPairGenerator;
+import java.util.Base64;
 import java.util.Date;
 import java.util.UUID;
 
@@ -156,4 +158,43 @@ class JwtTokenProviderContractTest {
         ReflectionTestUtils.setField(provider, "acceptLegacyWithoutClaims", false);
         assertFalse(provider.validateToken(legacy));
     }
+
+    @Test
+    void rs256ModeAcceptsPublicKeySignatureButRejectsHs256AndUntrustedKey() throws Exception {
+        var generator = KeyPairGenerator.getInstance("RSA");
+        generator.initialize(2048);
+        var pair = generator.generateKeyPair();
+        var stranger = generator.generateKeyPair();
+        var publicKey = Base64.getEncoder().encodeToString(pair.getPublic().getEncoded());
+        var rsa = new JwtTokenProvider("", publicKey);
+        UUID id = UUID.randomUUID();
+
+        String token = Jwts.builder().subject(id.toString())
+                .issuer("todo-user-service").audience().add("todo-api").and()
+                .expiration(new Date(System.currentTimeMillis() + 60_000L))
+                .signWith(pair.getPrivate(), Jwts.SIG.RS256).compact();
+        assertTrue(rsa.validateToken(token));
+        assertEquals(id, rsa.getUserIdFromToken(token));
+        assertFalse(provider.validateToken(token));
+
+        String forged = Jwts.builder().subject(id.toString())
+                .issuer("todo-user-service").audience().add("todo-api").and()
+                .expiration(new Date(System.currentTimeMillis() + 60_000L))
+                .signWith(stranger.getPrivate(), Jwts.SIG.RS256).compact();
+        assertFalse(rsa.validateToken(forged));
+
+        String hs = Jwts.builder().subject(id.toString())
+                .issuer("todo-user-service").audience().add("todo-api").and()
+                .expiration(new Date(System.currentTimeMillis() + 60_000L))
+                .signWith(Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8)))
+                .compact();
+        assertFalse(rsa.validateToken(hs));
+    }
+
+    @Test
+    void missingLegacySecretAndMalformedPublicKeyFailClosed() {
+        assertThrows(IllegalArgumentException.class, () -> new JwtTokenProvider("", ""));
+        assertThrows(IllegalArgumentException.class, () -> new JwtTokenProvider("", "not-base64"));
+    }
+
 }
