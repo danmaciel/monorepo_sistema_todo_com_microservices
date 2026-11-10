@@ -7,6 +7,7 @@ Does not print tokens or passwords. Restarts User Service after the test.
 import subprocess
 import sys
 import uuid
+import urllib.error
 
 from e2e_gateway import call, expect
 
@@ -38,10 +39,15 @@ def main():
     try:
         compose("stop", "user-service")
 
-        status, _ = call("GET", "/api/users/me", token=first)
-        assert 500 <= status <= 599, (
-            "User Service should be unavailable during the failure scenario; got HTTP " + str(status)
-        )
+        # An unreachable upstream may return a gateway 5xx or reach the
+        # client's 15-second timeout. Neither means the API remained usable.
+        try:
+            status, _ = call("GET", "/api/users/me", token=first)
+            assert 500 <= status <= 599, (
+                "User Service should be unavailable during the failure scenario; got HTTP " + str(status)
+            )
+        except (TimeoutError, urllib.error.URLError):
+            pass
 
         status, owner_task = call("GET", "/api/todos/" + task_id, token=first)
         expect(200, status, "read own task while User Service is down")
