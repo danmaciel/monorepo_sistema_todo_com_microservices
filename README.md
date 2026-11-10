@@ -24,7 +24,7 @@ Projeto de demonstração técnica com React, Spring Boot, API Gateway, PostgreS
        ▼                   ▼
 ┌─────────────┐     ┌─────────────┐
 │ PostgreSQL  │     │ PostgreSQL  │
-│   (:5432)   │     │   (:5432)   │
+│   (:5432)   │     │   (:5433)   │
 └─────────────┘     └─────────────┘
 ```
 
@@ -37,7 +37,7 @@ Projeto de demonstração técnica com React, Spring Boot, API Gateway, PostgreS
 | **User Service** | Spring Boot + JPA | 8081 |
 | **Todo Service** | Spring Boot + JPA | 8082 |
 | **Service Discovery** | Eureka Server | 8761 |
-| **Banco de Dados** | PostgreSQL 15 | 5432 |
+| **User DB / Todo DB** | PostgreSQL 15, instâncias e volumes separados | 5432 / 5433 (host) |
 | **Redis (disponível no Compose; ainda sem integração funcional)** | Redis 7 | 6379 |
 
 ## 📁 Estrutura do Projeto
@@ -57,9 +57,18 @@ todo-monorepo/
 └── scripts/
 ```
 
+## Persistência por serviço
+
+```text
+User Service → user-db:5432/usersdb   (volume user_postgres_data)
+Todo Service → todo-db:5432/todosdb  (volume todo_postgres_data)
+```
+
+O Docker Compose publica essas bases apenas em `127.0.0.1:5432` e `127.0.0.1:5433`, respectivamente. Cada serviço executa suas próprias migrações Flyway. **Os volumes antigos do PostgreSQL compartilhado não são migrados automaticamente**; consulte o [plano de evolução do banco](docs/DATABASE_SCHEMA_MIGRATION_PLAN.md) antes de reutilizar dados locais.
+
 ## 🛡️ Configuração segura
 
-Antes de iniciar com Docker Compose, copie `.env.example` para `.env` e preencha `POSTGRES_PASSWORD` e `JWT_SECRET` com valores fortes (não versione o `.env`). Para executar os serviços Java fora do Docker, exporte `DB_PASSWORD` e `JWT_SECRET` no ambiente. Credenciais de demonstração não são apropriadas para produção.
+Antes de iniciar com Docker Compose, copie `.env.example` para `.env` e preencha `USER_DB_PASSWORD`, `TODO_DB_PASSWORD` e `JWT_SECRET` com valores fortes e distintos (não versione o `.env`). Para executar os serviços Java fora do Docker, configure `DB_PASSWORD`, `DB_USERNAME`, `DB_URL` e `JWT_SECRET` no processo de cada serviço: User Service usa `jdbc:postgresql://localhost:5432/usersdb` (`users_app`), Todo Service usa `jdbc:postgresql://localhost:5433/todosdb` (`todos_app`). Credenciais de demonstração não são apropriadas para produção.
 
 **Importante:** os serviços Java precisam compartilhar o segredo JWT. No ambiente Docker o Compose fornece essas variáveis; no ambiente local o segredo e a senha não são mais embutidos nos arquivos `application.yml`.
 
@@ -238,7 +247,7 @@ npm run dev --workspace=web-app
 
 A pipeline [Services CI](.github/workflows/ci.yml) executa verificações dos serviços Java e do frontend. Além dos testes unitários de autenticação e propriedade de tarefas, a pipeline [Docker Compose E2E](.github/workflows/e2e.yml) já testa o Gateway, PostgreSQL e serviços reais: cadastro, login, criação e edição de tarefas, isolamento entre usuários e exclusão. Ela também verifica traces exportados ao Zipkin.
 
-O gateway utiliza rotas estáticas; o Eureka registra os serviços, mas não é usado como balanceador dinâmico pelas rotas atuais. O PostgreSQL é compartilhado entre serviços, e o Redis do Compose ainda não é usado como cache pela aplicação. Essas escolhas e os próximos passos estão explicados em [Arquitetura e decisões técnicas](docs/ARCHITECTURE.md).
+O gateway utiliza rotas estáticas; o Eureka registra os serviços, mas não é usado como balanceador dinâmico pelas rotas atuais. User Service e Todo Service agora usam bancos PostgreSQL **separados**, com volumes e credenciais independentes; o Redis do Compose ainda não é usado como cache pela aplicação. Essas escolhas e os próximos passos estão explicados em [Arquitetura e decisões técnicas](docs/ARCHITECTURE.md).
 
 ## 🔎 Tracing distribuído (Docker)
 

@@ -8,7 +8,7 @@ Este documento descreve a situação observada no código do projeto demonstrati
 - `User Service`: entidade JPA `User` mapeada para `public.users`, com `spring.jpa.hibernate.ddl-auto=update` nos perfis local e Docker.
 - `Todo Service`: entidade JPA `Todo` mapeada para `public.todos`, também com `ddl-auto=update`.
 - O User Service usa Flyway com `baseline-on-migrate=true` e a migração `V1__create_refresh_sessions.sql` para `public.refresh_sessions`.
-- User Service e Todo Service compartilham a mesma base `tododb` no Compose. Alterar um serviço ou migrar a base pode afetar o outro.
+- O inventário original registrava um PostgreSQL compartilhado. A implementação posterior usa bases e volumes separados: `usersdb` para User Service e `todosdb` para Todo Service.
 - O inventário inicial foi realizado antes da migração das entidades para Flyway; a implementação atual é descrita adiante.
 
 ## Verificação de leitura
@@ -39,15 +39,15 @@ A implementação para a base demonstrativa passa a usar `ddl-auto=validate`; n�
 Na etapa de migração do laboratório, foram adicionadas migrações para as entidades de negócio:
 
 - User Service: `V2__create_users.sql`, após a migração `V1` já existente de `refresh_sessions`; mantém a tabela histórica padrão `flyway_schema_history`.
-- Todo Service: `V1__create_todos.sql`; usa `todo_flyway_schema_history` para **não compartilhar o controle de versões do Flyway** com o User Service.
+- Todo Service: `V1__create_todos.sql`; mantém seu próprio histórico `todo_flyway_schema_history` na base `todosdb`. O User Service mantém `flyway_schema_history` em `usersdb`.
 - Ambos os serviços agora usam `spring.jpa.hibernate.ddl-auto=validate`, sem criação/alteração automática de tabelas pelo Hibernate.
 - As definições `CREATE TABLE IF NOT EXISTS` não apagam tabelas existentes. **Isso não significa que uma base antiga, com esquema divergente, foi automaticamente migrada.** A verificação Hibernate e o teste E2E precisam passar.
 - Os testes PostgreSQL do armazenamento de sessões usam a tabela `users` criada pela própria migration, em vez de fabricar um esquema diferente só para o teste.
 
 A inicialização de banco novo deve ser validada pela pipeline Docker Compose E2E. O histórico de migrações não foi reescrito. Bancos locais anteriores continuam exigindo verificação do schema antes de reutilizar volumes; para ambiente descartável, crie um volume novo conforme o procedimento normal de Docker, sem apagar arquivos ou histórico Git.
 
-**Nota:** os dois serviços ainda compartilham o mesmo PostgreSQL e usuário de banco. A separação de esquemas/credenciais é uma melhoria futura; esta etapa apenas separa os históricos de versões do Flyway.
+**Atualização de isolamento:** duas instâncias PostgreSQL agora possuem credenciais e volumes independentes. A configuração não realiza transferência automática de dados do volume anterior. Não houve alteração de histórico Git ou de migrações já publicadas.
 
 ## Restrições e ressalvas
 
-O projeto não implementa bancos separados por serviço, deploy produtivo ou rollback automático de migrações. O teste de contrato mínimo é uma *evidência inicial*, não uma substituição dessas etapas.
+O projeto implementa bancos separados por serviço no Compose, mas não inclui deploy produtivo, migração de volumes legados nem rollback automático de migrações. O teste de contrato mínimo é uma *evidência inicial*, não uma substituição dessas etapas.

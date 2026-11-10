@@ -5,7 +5,7 @@ spring:
   application:
     name: todo-service
   datasource:
-    url: jdbc:postgresql://postgres:5432/tododb
+    url: jdbc:postgresql://todo-db:5432/todosdb
     username: ${SPRING_DATASOURCE_USERNAME}
     password: ${SPRING_DATASOURCE_PASSWORD}
     driver-class-name: org.postgresql.Driver

@@ -17,7 +17,8 @@ jobs:
       - name: Generate disposable CI credentials
         shell: bash
         run: |
-          echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
+          echo "USER_DB_PASSWORD=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
+          echo "TODO_DB_PASSWORD=$(openssl rand -hex 24)" >> "$GITHUB_ENV"
           echo "JWT_SECRET=$(openssl rand -hex 48)" >> "$GITHUB_ENV"
           echo "AUTH_REFRESH_CSRF_KEY_BASE64=$(openssl rand -base64 48)" >> "$GITHUB_ENV"
       - name: Build and start backend services
@@ -25,7 +26,7 @@ jobs:
           JWT_ACCEPT_LEGACY_WITHOUT_CLAIMS: 'false'
           AUTH_REFRESH_HTTP_ENABLED: 'true'
           AUTH_REFRESH_ALLOWED_ORIGINS: 'http://localhost:3000,https://localhost:3000'
-        run: docker compose up --build -d postgres zipkin eureka user-service todo-service gateway
+        run: docker compose up --build -d user-db todo-db zipkin eureka user-service todo-service gateway
       - name: Verify service availability and business scenario via Gateway
         env:
           E2E_REFRESH_ENABLED: "true"

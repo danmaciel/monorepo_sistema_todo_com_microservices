@@ -9,8 +9,8 @@ flowchart LR
   Browser[React / Browser] --> Gateway[API Gateway :8080]
   Gateway -->|/api/users/**| User[User Service :8081]
   Gateway -->|/api/todos/**| Todo[Todo Service :8082]
-  User --> DB[(PostgreSQL)]
-  Todo --> DB
+  User --> UserDB[(PostgreSQL usersdb)]
+  Todo --> TodoDB[(PostgreSQL todosdb)]
   User -.registra-se.-> Eureka[Eureka :8761]
   Todo -.registra-se.-> Eureka
   Gateway -.registra-se.-> Eureka
@@ -31,7 +31,7 @@ Os dois serviços precisam receber o mesmo segredo forte. Um segredo simétrico 
 
 ## Persistência e isolamento
 
-O Compose utiliza **um PostgreSQL compartilhado** e a mesma base `tododb` para User Service e Todo Service. As tabelas `users`, `todos` e `refresh_sessions` são versionadas por Flyway; cada serviço utiliza sua própria tabela de histórico de migrações, e o Hibernate valida o esquema sem alterá-lo (`ddl-auto=validate`). Isso simplifica o ambiente, mas não oferece isolamento real de dados ou credenciais entre serviços. Em um sistema evolutivo, estudar separação de schemas ou bancos por serviço, contratos de integração e rollout coordenado de migrações. Consulte [plano de migração](DATABASE_SCHEMA_MIGRATION_PLAN.md).
+O Compose utiliza **duas instâncias PostgreSQL isoladas**: User Service é dono de `usersdb` (`users`, `refresh_sessions`) e Todo Service é dono de `todosdb` (`todos`). Cada banco possui seu próprio volume, usuário e senha. Cada serviço aplica suas migrações Flyway e o Hibernate apenas valida o esquema (`ddl-auto=validate`). Não há consulta SQL cruzada ou chave estrangeira entre serviços. A associação da tarefa ao usuário é representada apenas pelo UUID; políticas distribuídas de exclusão de usuário, sincronização e consistência eventual continuam fora do escopo. Consulte [plano de migração](DATABASE_SCHEMA_MIGRATION_PLAN.md).
 
 ## Observabilidade e resiliência
 
@@ -42,12 +42,14 @@ O Compose utiliza **um PostgreSQL compartilhado** e a mesma base `tododb` para U
 
 ## Configuração segura
 
-Use `POSTGRES_PASSWORD` e `JWT_SECRET` fortes para Docker. Para execução Java fora do Docker, configure `DB_PASSWORD` e `JWT_SECRET`; `DB_URL` e `DB_USERNAME` são opcionais e possuem valores locais de desenvolvimento.
+Use `USER_DB_PASSWORD`, `TODO_DB_PASSWORD` e `JWT_SECRET` fortes e distintos para Docker. Para execução Java fora do Docker, configure separadamente `DB_PASSWORD`, `DB_URL`, `DB_USERNAME` e `JWT_SECRET` em cada serviço.
 
 Exemplo em terminal, sem publicar os valores no Git:
 
 ```bash
-export DB_PASSWORD='<senha-local>'
+export DB_URL='jdbc:postgresql://localhost:5432/usersdb' # User Service; para Todo use localhost:5433/todosdb
+export DB_USERNAME='users_app' # para Todo use todos_app
+export DB_PASSWORD='<senha-do-servico>'
 export JWT_SECRET='<segredo-aleatorio-com-pelo-menos-32-bytes>'
 ```
 
@@ -58,7 +60,7 @@ CORS no Gateway e no Todo Service está limitado às origens locais `http://loca
 ## Próximas melhorias recomendadas
 
 - Ampliar o E2E existente com cenários de indisponibilidade, expiração de token e contratos entre serviços.
-- Separar os dados e as credenciais de cada serviço e validar migrações de bancos legados antes de qualquer rollout externo.
+- Estudar comunicação assíncrona, consistência eventual e políticas para referências de usuários em tarefas; validar migrações de bancos legados antes de qualquer rollout externo.
 - Migrar segredos e configuração de produção para gerenciador de segredos.
 - Evoluir logs estruturados, métricas, alertas e correlação com os traces já implementados.
 - Revisar autenticação com chaves assimétricas e autorização baseada em políticas.
