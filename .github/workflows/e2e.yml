@@ -25,11 +25,13 @@ jobs:
         env:
           JWT_ACCEPT_LEGACY_WITHOUT_CLAIMS: 'false'
           AUTH_REFRESH_HTTP_ENABLED: 'true'
+          JWT_ACCESS_EXPIRATION_MS: '900000' # Opt-in test: 15 minutes; production/default remain unchanged
           AUTH_REFRESH_ALLOWED_ORIGINS: 'http://localhost:3000,https://localhost:3000'
         run: docker compose up --build -d user-db todo-db zipkin eureka user-service todo-service gateway
       - name: Verify service availability and business scenario via Gateway
         env:
           E2E_REFRESH_ENABLED: "true"
+          E2E_EXPECT_ACCESS_TTL_SECONDS: "900"
         run: python3 scripts/e2e_gateway.py
       - name: Verify minimum database schema contract (read-only)
         run: python3 scripts/verify_db_schema.py
