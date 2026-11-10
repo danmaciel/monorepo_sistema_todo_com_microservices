@@ -44,17 +44,24 @@ class RefreshSessionStoreTest {
                 postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
         Flyway.configure().dataSource(dataSource).load().migrate();
         jdbc = new JdbcTemplate(dataSource);
-        // This isolated Testcontainers schema models only the User fields required
-        // by refresh authorization; production users remain Hibernate-managed.
-        jdbc.execute("CREATE TABLE users (id UUID PRIMARY KEY, enabled BOOLEAN NOT NULL)");
+        // Flyway V2 creates the same users contract used by the application.
+        // Do not create an incompatible test-only users table.
         store = new RefreshSessionStore(jdbc);
         rotations = new RefreshSessionRotationService(store, new DataSourceTransactionManager(dataSource));
+    }
+
+    private static void insertTestUser(UUID userId, boolean enabled) {
+        String identity = "test_" + userId;
+        jdbc.update(
+                "INSERT INTO users (id, username, email, password, enabled, created_at) " +
+                        "VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)",
+                userId, identity, identity + "@example.invalid", "test-hash", enabled);
     }
 
     private static String createActiveToken() {
         String token = RefreshTokenMaterial.generate();
         UUID userId = UUID.randomUUID();
-        jdbc.update("INSERT INTO users (id, enabled) VALUES (?, TRUE)", userId);
+        insertTestUser(userId, true);
         store.create(new RefreshSession(
                 UUID.randomUUID(), userId, UUID.randomUUID(),
                 RefreshTokenMaterial.fingerprint(token), Instant.now().plusSeconds(600), null));
@@ -472,7 +479,7 @@ class RefreshSessionStoreTest {
     @Test
     void initialIssuancePersistsOnlyFingerprintForAnEnabledAccount() {
         UUID userId = UUID.randomUUID();
-        jdbc.update("INSERT INTO users (id, enabled) VALUES (?, TRUE)", userId);
+        insertTestUser(userId, true);
 
         var issuer = new RefreshSessionIssuanceService(store, 600L);
         var issued = issuer.issue(userId).orElseThrow();
@@ -493,7 +500,7 @@ class RefreshSessionStoreTest {
     void initialIssuanceDeniesDisabledAndDeletedAccounts() {
         UUID disabledId = UUID.randomUUID();
         UUID missingId = UUID.randomUUID();
-        jdbc.update("INSERT INTO users (id, enabled) VALUES (?, FALSE)", disabledId);
+        insertTestUser(disabledId, false);
 
         var issuer = new RefreshSessionIssuanceService(store, 600L);
         assertTrue(issuer.issue(disabledId).isEmpty());
