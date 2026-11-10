@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.nio.charset.StandardCharsets;
+import java.security.KeyPairGenerator;
+import java.util.Base64;
 import java.util.Date;
 import java.util.UUID;
 
@@ -169,4 +171,39 @@ class JwtTokenProviderContractTest {
         ReflectionTestUtils.setField(provider, "acceptLegacyWithoutClaims", false);
         assertFalse(provider.validateToken(legacy));
     }
+
+    @Test
+    void rs256ModeIssuesTokensWithPrivateKeyAndRejectsLegacyHs256() throws Exception {
+        var generator = KeyPairGenerator.getInstance("RSA");
+        generator.initialize(2048);
+        var pair = generator.generateKeyPair();
+        var publicKey = Base64.getEncoder().encodeToString(pair.getPublic().getEncoded());
+        var privateKey = Base64.getEncoder().encodeToString(pair.getPrivate().getEncoded());
+        var rsa = new JwtTokenProvider("", 60_000L, privateKey, publicKey);
+        UUID id = UUID.randomUUID();
+
+        String token = rsa.generateToken(id, "rsa-tester");
+        assertTrue(rsa.validateToken(token));
+        assertEquals(id, rsa.getUserIdFromToken(token));
+        assertEquals("rsa-tester", rsa.getUsernameFromToken(token));
+        assertEquals("RS256", Jwts.parser().verifyWith(pair.getPublic())
+                .build().parseSignedClaims(token).getHeader().getAlgorithm());
+
+        String legacy = provider.generateToken(id, "legacy");
+        assertFalse(rsa.validateToken(legacy));
+        assertFalse(provider.validateToken(token));
+    }
+
+    @Test
+    void invalidOrIncompleteRsaConfigurationFailsClosed() throws Exception {
+        var generator = KeyPairGenerator.getInstance("RSA");
+        generator.initialize(2048);
+        var pair = generator.generateKeyPair();
+        String publicKey = Base64.getEncoder().encodeToString(pair.getPublic().getEncoded());
+        assertThrows(IllegalArgumentException.class,
+                () -> new JwtTokenProvider("", 60_000L, "", publicKey));
+        assertThrows(IllegalArgumentException.class,
+                () -> new JwtTokenProvider("", 60_000L, "bad-private-key", publicKey));
+    }
+
 }

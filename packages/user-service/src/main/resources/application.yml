@@ -32,7 +32,12 @@ spring:
     default-property-inclusion: non_null
 
 jwt:
-  secret: ${JWT_SECRET}
+  # RS256 is opt-in; never commit real private key material.
+  # When RSA is configured, HS256 is not accepted as a fallback.
+  rsa:
+    private-key-base64: ${JWT_RSA_PRIVATE_KEY_BASE64:}
+    public-key-base64: ${JWT_RSA_PUBLIC_KEY_BASE64:}
+  secret: ${JWT_SECRET:}
   expiration: ${JWT_ACCESS_EXPIRATION_MS:86400000} # Padrão: 24h; valor em milissegundos
   # Set false only after all previously issued 24h JWTs have expired.
   accept-legacy-without-claims: ${JWT_ACCEPT_LEGACY_WITHOUT_CLAIMS:true}
